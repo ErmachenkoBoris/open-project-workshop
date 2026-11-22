@@ -2,49 +2,57 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
 import { ideas, payments } from './ideas.js';
-import { forecast } from './economics.js';
+import { forecast, monthlyResult, number } from './economics.js';
+import { Economy } from './Economy.jsx';
+import { money } from './Format.js';
 import './style.css';
 
-const storageKey = 'yaroslavl-pet-project-workshop:v1';
+const storageKey = 'open-project-workshop:v1';
+const previousStorageKey = 'yaroslavl-pet-project-workshop:v1';
 const defaults = {
   name: '', source: 'bank', ideaId: '', customIdea: '', audience: '', channel: '',
-  model: 'sale', numbers: { shared: { budget: '', cpc: '', conversion: '', fixed: '0' } },
+  model: 'sale', customModel: '', customBasis: 'users', acquisition: 'cpa', step: 1,
+  numbers: { shared: { budget: '', cpa: '', cpc: '', registrationRate: '', launchCost: '0' } },
+  month: { revenue: '', variable: '', ads: '', fixed: '' },
 };
+const modelDefaults = {
+  price: '', rate: '', conversion: '', periods: '', margin: '100', freeCost: '0',
+  impressions: '', cpm: '',
+};
+
+function migrateDraft(saved) {
+  const { budget = '', cpc = '', fixed = '' } = saved.numbers?.shared ?? {};
+  const numbers = { shared: { budget, cpc } };
+  for (const model of ['sale', 'subscription', 'commission']) {
+    const old = saved.numbers?.[model];
+    if (!old) continue;
+    const price = number(old.price);
+    const unitCost = number(old.unitCost ?? 0);
+    const proceeds = model === 'commission' ? price * number(old.rate) / 100 : price;
+    const margin = proceeds > 0 && unitCost <= proceeds
+      ? String(Math.round((1 - unitCost / proceeds) * 1000000) / 10000) : '';
+    numbers[model] = { price: old.price ?? '', rate: old.rate ?? '', margin };
+  }
+  return {
+    ...saved, numbers, acquisition: cpc ? 'clicks' : 'cpa', month: { fixed },
+  };
+}
 
 function readDraft() {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey));
+    const current = JSON.parse(localStorage.getItem(storageKey));
+    const previous = current ? null : JSON.parse(localStorage.getItem(previousStorageKey));
+    const saved = current ?? (previous && migrateDraft(previous));
     if (!saved) return defaults;
-    return { ...defaults, ...saved, numbers: {
-      ...saved.numbers, shared: { ...defaults.numbers.shared, ...saved.numbers?.shared },
-    } };
+    return {
+      ...defaults, ...saved,
+      model: Object.hasOwn(payments, saved.model) ? saved.model : defaults.model,
+      numbers: { ...saved.numbers, shared: { ...defaults.numbers.shared, ...saved.numbers?.shared } },
+      month: { ...defaults.month, ...saved.month },
+    };
   } catch {
     return defaults;
   }
-}
-
-const numeric = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 });
-const currency = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0, maximumFractionDigits: 2 });
-const money = (value) => currency.format(value);
-
-function Amount({ name, label, unit, hint, value, onChange, example }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <span className="input-with-unit">
-        <input
-          name={name}
-          inputMode="decimal"
-          value={value}
-          placeholder={example}
-          aria-describedby={hint ? name + '-hint' : undefined}
-          onChange={(event) => onChange(name, event.target.value)}
-        />
-        <span aria-hidden="true">{unit}</span>
-      </span>
-      {hint && <small id={name + '-hint'}>{hint}</small>}
-    </label>
-  );
 }
 
 function QRDialog({ dialog }) {
@@ -73,7 +81,6 @@ function QRDialog({ dialog }) {
 
 function App() {
   const [draft, setDraft] = useState(readDraft);
-  const [step, setStep] = useState(1);
   const [error, setError] = useState('');
   const [storageFailed, setStorageFailed] = useState(false);
   const [filter, setFilter] = useState('Все');
@@ -83,11 +90,12 @@ function App() {
   const idea = ideas.find(({ id }) => id === draft.ideaId);
   const title = draft.source === 'own' ? draft.customIdea : idea?.name;
   const complete = Boolean(draft.name.trim() && title?.trim() && draft.audience.trim());
-  const model = draft.model;
-  const values = {
-    price: '', rate: '', unitCost: '0', ...draft.numbers[model], ...draft.numbers.shared,
-  };
-  const result = forecast(values, model);
+  const step = complete && draft.step === 2 ? 2 : 1;
+  const { model, acquisition, customBasis, month } = draft;
+  const modelLabel = model === 'custom' ? draft.customModel.trim() || payments.custom.label : payments[model].label;
+  const values = { ...modelDefaults, ...draft.numbers[model], ...draft.numbers.shared };
+  const result = forecast(values, model, acquisition, customBasis);
+  const monthly = monthlyResult(month);
   const possibleIdeas = filter === 'Все' ? ideas : ideas.filter(({ format }) => format === filter);
   const shownIdeas = expanded || filter !== 'Все' ? possibleIdeas : possibleIdeas.slice(0, 4);
 
@@ -133,7 +141,7 @@ function App() {
       setError('Заполни имя, выбери идею и укажи аудиторию.');
       return;
     }
-    setStep(nextStep);
+    update('step', nextStep);
     requestAnimationFrame(() => stepHeading.current?.focus());
   }
 
@@ -148,25 +156,37 @@ function App() {
     }));
   }
 
-  const amount = (name, label, unit, example, hint) => (
-    <Amount name={name} label={label} unit={unit} example={example} hint={hint} value={values[name]} onChange={updateAmount} />
-  );
+  function updateMonth(name, value) {
+    setDraft((previous) => ({ ...previous, month: { ...previous.month, [name]: value } }));
+  }
 
   return (
     <>
       <header className="top">
         <div className="wrap top-inner">
-          <span className="brand"><span className="brand-mark" aria-hidden="true">{'{ }'}</span> Практикум</span>
+          <span className="brand"><span className="brand-mark" aria-hidden="true">{'{ }'}</span> Open Project Workshop</span>
           <button type="button" className="quiet qr-toggle" onClick={() => dialog.current.showModal()}>QR для воркшопа</button>
         </div>
       </header>
 
       <main className="wrap">
         <div className="hero">
-          <p className="place">Воркшоп · Ярославль</p>
           <h1>Код есть.<br />А деньги?</h1>
           <p className="lede">Выбери пет-проект, обсуди его в паре и посчитай, может ли окупиться реклама.</p>
         </div>
+
+        {draft.name.trim() && (
+          <section className="participant" aria-label="Твой черновик">
+            <div className="participant-heading">
+              <h2>{draft.name.trim()}, это твоя страница</h2>
+              <span>{storageFailed ? 'Сохранение недоступно' : 'Сохранено в этом браузере'}</span>
+            </div>
+            {title?.trim() && <p><strong>{title.trim()}</strong> · {modelLabel}</p>}
+            {draft.audience.trim() && <p>Аудитория — {draft.audience.trim()}</p>}
+            {complete && result && <p>Вклад когорты после расходов — <strong>{money(result.profit)}</strong></p>}
+            {complete && monthly !== null && <p>Результат месяца — <strong>{money(monthly)}</strong></p>}
+          </section>
+        )}
 
         <nav className="steps" aria-label="Блоки практики">
           <button type="button" aria-current={step === 1 ? 'step' : undefined} onClick={() => goTo(1)}><span>1</span> Знакомство и идея</button>
@@ -227,7 +247,7 @@ function App() {
             </div>
 
             <fieldset className="section payment">
-              <legend>За что будут платить?</legend>
+              <legend>Как проект будет зарабатывать?</legend>
               <div className="payment-grid">
                 {Object.entries(payments).map(([key, option]) => (
                   <label className="payment-option" key={key}>
@@ -236,6 +256,11 @@ function App() {
                   </label>
                 ))}
               </div>
+              {model === 'custom' && <label className="field custom-model">
+                <span>Опиши свою модель дохода</span>
+                <input value={draft.customModel} onChange={(event) => update('customModel', event.target.value)}
+                  maxLength={160} placeholder="Например, донаты и спонсорские размещения" />
+              </label>}
             </fieldset>
 
             <aside className="pair">
@@ -248,56 +273,20 @@ function App() {
         ) : (
           <section className="panel">
             <h2 tabIndex="-1" ref={stepHeading}>Экономика проекта</h2>
-            <p className="context">{title} · {payments[model].label}</p>
-            <p className="intro">Возьмём один месяц и оценим результат при заданной цене клика и конверсии.</p>
-            <div className="calc">
-              <div>
-                <h3>Реклама и расходы</h3>
-                <div className="columns amount-grid">
-                  {amount('budget', 'Рекламный бюджет', '₽', '10 000')}
-                  {amount('cpc', 'Цена клика', '₽', '25')}
-                  {amount('conversion', model === 'free' ? 'Конверсия в целевое действие' : 'Конверсия в первую оплату', '%', '5', 'Доля кликов, которые приводят к целевому действию.')}
-                  {amount('fixed', 'Постоянные расходы за месяц', '₽', '2 000')}
-                </div>
-                {model !== 'free' && (
-                  <div className="section">
-                    <h3>Доход с клиента</h3>
-                    <div className="columns amount-grid">
-                      {amount('price', { sale: 'Цена продажи', subscription: 'Цена первого месяца', commission: 'Средняя сумма сделки' }[model], '₽', '900')}
-                      {model === 'commission' && amount('rate', 'Комиссия со сделки', '%', '15')}
-                      {amount('unitCost', 'Расход на клиента', '₽', '0', 'Например, себестоимость или комиссия платёжной системы.')}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="results" aria-live="polite" aria-atomic="true">
-                <h3>Прогноз на месяц</h3>
-                {result ? (
-                  <>
-                    <strong className="profit">{money(result.profit)}</strong>
-                    <p className="profit-caption">{result.profit > 0 ? 'Ожидаемая прибыль' : result.profit < 0 ? 'Ожидаемый убыток' : 'Доходы покрывают расходы'}</p>
-                    <dl>
-                      <div><dt>Клики</dt><dd>{numeric.format(result.clicks)}</dd></div>
-                      <div><dt>{model === 'free' ? 'Целевые действия' : 'Платящие клиенты'}</dt><dd>{numeric.format(result.customers)}</dd></div>
-                      <div><dt>Выручка</dt><dd>{money(result.revenue)}</dd></div>
-                      <div><dt>Всего расходов</dt><dd>{money(result.costs)}</dd></div>
-                      <div><dt>Стоимость привлечения</dt><dd>{result.costToAcquire === null ? '—' : money(result.costToAcquire)}</dd></div>
-                      {model !== 'free' && <div><dt>Маржа с клиента до рекламы</dt><dd>{money(result.margin)}</dd></div>}
-                    </dl>
-                    <p className="breakeven">{model === 'free'
-                      ? 'В бесплатной модели реклама увеличивает расходы. Сравнивай сценарии по стоимости целевого действия.'
-                      : result.breakEven === null
-                        ? 'Рост бюджета при этих параметрах не даст прибыли. Попробуй изменить цену, стоимость клика или конверсию.'
-                        : result.breakEven === 0
-                          ? 'При этих параметрах положительный бюджет уже даёт прибыль.'
-                          : 'Бюджет для выхода в ноль — около ' + money(result.breakEven) + '. При большем бюджете ожидается прибыль.'}</p>
-                  </>
-                ) : <p className="result-empty">Введи числа, чтобы увидеть прибыль и окупаемость. Цена клика должна быть больше нуля, проценты — от 0 до 100.</p>}
-              </div>
-            </div>
+            <p className="context">{title} · {modelLabel}</p>
+            <p className="intro">Посчитай вклад пользователей, которых приведёт одна рекламная кампания.</p>
+            <label className="field compact model-select">
+              <span>Модель дохода</span>
+              <select value={model} onChange={(event) => update('model', event.target.value)}>
+                {Object.entries(payments).map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
+              </select>
+            </label>
+            <Economy model={model} acquisition={acquisition} customBasis={customBasis} values={values}
+              update={update} updateAmount={updateAmount} result={result} month={month} updateMonth={updateMonth}
+              monthly={monthly} />
             <aside className="pair">
               <h3>Сравните сценарии в паре</h3>
-              <p>Поменяйте одно число. Что сильнее влияет на результат: цена, конверсия или стоимость клика? Какие данные нужны, чтобы проверить расчёт?</p>
+              <p>Поменяйте одно число. Сколько можно платить за нового пользователя? Какой бюджет готовы выделить на тест и что станет поводом его остановить?</p>
             </aside>
             <div className="actions"><button className="button secondary" onClick={() => goTo(1)}>Вернуться к идее</button></div>
           </section>
