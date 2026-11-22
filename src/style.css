@@ -216,3 +216,18 @@ dialog::backdrop { background: #171d14ac; }
 .benchmark-body { display: grid; gap: 10px; padding: 0 12px 12px; }
 .benchmark-body a { text-underline-offset: 2px; }
 .benchmark-list { margin: 0; padding-left: 1.25rem; display: grid; gap: 7px; }
+
+.benchmark-body h4 { margin: 3px 0 -4px; color: var(--ink); font-size: 1rem; font-weight: 800; }
+.acquisition-method { margin-top: 12px; }
+.budget-estimate { margin-top: 10px; color: var(--green); }
+.project-costs { margin-top: 15px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.project-costs summary { cursor: pointer; color: var(--green); font-weight: 730; }
+.project-costs > .field, .cost-groups, .cost-note, .apply-cost-plan { margin-top: 12px; }
+.cost-groups { display: grid; gap: 14px; }
+.cost-groups legend { margin-bottom: 0; }
+.cost-note { font-size: .875rem; color: var(--muted); }
+.cost-totals { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 12px 0 0; }
+.cost-totals > div { display: flex; gap: 6px; }
+.cost-totals dd { margin: 0; font-weight: 720; }
+.input-with-unit:has([name="expense-domain"]) input { padding-right: 58px; }
+.input-with-unit:has([name="targetUsers"], [name="guestUsers"]) input { padding-right: 44px; }

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
 import { ideas, payments } from './ideas.js';
-import { forecast, monthlyResult, number } from './economics.js';
+import { estimateExpenses, forecast, monthlyResult, number } from './economics.js';
 import { Economy } from './Economy.jsx';
 import { money, monthOutcome } from './Format.js';
 import './style.css';
@@ -12,13 +12,13 @@ const previousStorageKey = 'yaroslavl-pet-project-workshop:v1';
 const retiredIdeas = { borrow: 'Соседский прокат', team: 'Сыграем вечером' };
 const defaults = {
   name: '', source: 'bank', ideaId: '', customIdea: '', audience: '', channel: '',
-  model: '', customModel: '', customBasis: 'users', acquisition: 'cpa', step: 1,
-  numbers: { shared: { budget: '', cpa: '', cpc: '', registrationRate: '', launchCost: '0' } },
+  model: '', customModel: '', customBasis: 'users', acquisition: 'cpa', target: 'budget', expenseMode: 'total', expenses: {}, step: 1,
+  numbers: { shared: { budget: '', targetUsers: '', monthlyPlan: '', cpa: '', cpc: '', registrationRate: '', launchCost: '0' } },
   month: { revenue: '', variable: '', ads: '', fixed: '' },
 };
 const modelDefaults = {
   price: '', rate: '', conversion: '', periods: '', margin: '100', freeCost: '0',
-  impressions: '', cpm: '',
+  impressions: '', cpm: '', guestUsers: '', guestViews: '',
 };
 
 function migrateDraft(saved) {
@@ -96,10 +96,11 @@ function App() {
   const title = draft.source === 'own' ? draft.customIdea : idea?.name ?? retiredIdeas[draft.ideaId];
   const complete = Boolean(draft.name.trim() && title?.trim() && draft.audience.trim() && draft.model);
   const step = complete && draft.step === 2 ? 2 : 1;
-  const { model, acquisition, customBasis, month } = draft;
+  const { model, acquisition, target, expenseMode, expenses, customBasis, month } = draft;
   const modelLabel = model === 'custom' ? draft.customModel.trim() || payments.custom.label : payments[model]?.label ?? '';
   const values = { ...modelDefaults, ...draft.numbers[model], ...draft.numbers.shared };
-  const result = model ? forecast(values, model, acquisition, customBasis) : null;
+  const costPlan = estimateExpenses(expenses, expenseMode, values.launchCost, values.monthlyPlan);
+  const result = model ? forecast({ ...values, launchCost: costPlan.upfront }, model, acquisition, customBasis, target) : null;
   const monthly = monthlyResult(month);
   const monthStatus = monthly === null ? null : monthOutcome(monthly);
   const possibleIdeas = filter === 'Все' ? ideas : ideas.filter(({ format }) => format === filter);
@@ -161,6 +162,10 @@ function App() {
         [group]: { ...previous.numbers[group], [name]: value },
       },
     }));
+  }
+
+  function updateExpense(name, value) {
+    setDraft((previous) => ({ ...previous, expenses: { ...previous.expenses, [name]: value } }));
   }
 
   function updateMonth(name, value) {
@@ -285,14 +290,15 @@ function App() {
           <section className="panel">
             <h2 tabIndex="-1" ref={stepHeading}>Экономика проекта</h2>
             <p className="context">{title} · {modelLabel}</p>
-            <p className="intro">Посчитай вклад пользователей, которых приведёт одна рекламная кампания.</p>
+            <p className="intro">Посчитай, сколько пользователей нужно и как на них заработать.</p>
             <label className="field compact model-select">
               <span>Модель дохода</span>
               <select value={model} onChange={(event) => update('model', event.target.value)}>
                 {Object.entries(payments).map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
               </select>
             </label>
-            <Economy model={model} acquisition={acquisition} customBasis={customBasis} values={values}
+            <Economy model={model} acquisition={acquisition} target={target} customBasis={customBasis} values={values}
+              expenseMode={expenseMode} expenses={expenses} costPlan={costPlan} updateExpense={updateExpense}
               update={update} updateAmount={updateAmount} result={result} month={month} updateMonth={updateMonth}
               monthly={monthly} />
             <aside className="pair">
