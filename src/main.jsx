@@ -10,6 +10,7 @@ import './style.css';
 const storageKey = 'open-project-workshop:v1';
 const previousStorageKey = 'yaroslavl-pet-project-workshop:v1';
 const retiredIdeas = { borrow: 'Соседский прокат', team: 'Сыграем вечером' };
+const featuredIdeas = ['open-slot', 'portfolio-review'];
 const defaults = {
   name: '', source: 'bank', ideaId: '', customIdea: '', audience: '', channel: '',
   model: '', customModel: '', customBasis: 'users', acquisition: 'cpa', target: 'budget', expenseMode: 'total', expenses: {}, step: 1,
@@ -109,7 +110,7 @@ function App() {
   const monthReport = monthlyResult(month, costPlan, plannedAds, month.period, monthRevenue);
   const monthStatus = monthReport.profit === null ? null : monthOutcome(monthReport.profit);
   const possibleIdeas = filter === 'Все' ? ideas : ideas.filter(({ format }) => format === filter);
-  const shownIdeas = expanded || filter !== 'Все' ? possibleIdeas : possibleIdeas.slice(0, 4);
+  const shownIdeas = expanded || filter !== 'Все' ? possibleIdeas : possibleIdeas.filter(({ id }) => featuredIdeas.includes(id));
 
   useEffect(() => {
     try {
@@ -248,7 +249,7 @@ function App() {
                       </button>
                     ))}
                   </div>
-                  {filter === 'Все' && <button type="button" className="quiet more" onClick={() => setExpanded(!expanded)}>{expanded ? 'Свернуть список' : 'Показать все 10 идей'}</button>}
+                  {filter === 'Все' && <button type="button" className="quiet more" onClick={() => setExpanded(!expanded)}>{expanded ? 'Свернуть список' : 'Показать все ' + ideas.length + ' идей'}</button>}
                   {title && <p className="selection">Выбрано: <strong>{title}</strong></p>}
                 </>
               )}

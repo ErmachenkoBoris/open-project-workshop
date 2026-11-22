@@ -64,24 +64,18 @@ export function estimateExpenses(expenses, mode, upfront, monthly) {
   };
 }
 
-export function forecast(values, model, acquisition, customBasis, target = 'budget') {
-  const fields = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, number(value)]));
-  const { conversion, margin, price, periods, rate, freeCost, launchCost, impressions, cpm,
-    guestViews } = fields;
-  const traffic = estimateAcquisition(values, acquisition, target);
-  if (!traffic || !valid(launchCost) || launchCost > moneyLimit) return null;
-  const { budget, users, costPerRegistration } = traffic;
-  const registeredBasis = model === 'ads' || (model === 'custom' && customBasis === 'users');
-
-  const payerShare = registeredBasis ? null : conversion / 100;
-  if (!registeredBasis && (!valid(payerShare, freeCost) || payerShare > 1 || freeCost > moneyLimit)) return null;
+export function lifetimeEconomics(values, model) {
+  const margin = number(values.margin);
+  const periods = number(values.periods);
+  const price = moneyInput(values.price);
+  const rate = number(values.rate);
+  const impressions = number(values.impressions);
+  const cpm = moneyInput(values.cpm);
   if (!valid(margin) || margin > 100) return null;
-  if (model !== 'ads' && (!valid(price) || price > moneyLimit)) return null;
+  if (model !== 'ads' && !valid(price)) return null;
   if (['subscription', 'commission', 'ads'].includes(model) && !valid(periods)) return null;
   if (model === 'commission' && (!valid(rate) || rate > 100)) return null;
-  const guestCount = model === 'ads' ? number(String(values.guestUsers ?? '').trim() || 0) : 0;
-  if (model === 'ads' && (!valid(impressions, cpm) || cpm > moneyLimit || !Number.isSafeInteger(guestCount)
-    || guestCount < 0 || (guestCount > 0 && !valid(guestViews)))) return null;
+  if (model === 'ads' && !valid(impressions, cpm)) return null;
 
   let revenueMultiplier = 1;
   if (model === 'subscription') revenueMultiplier = periods;
@@ -89,6 +83,24 @@ export function forecast(values, model, acquisition, customBasis, target = 'budg
   if (model === 'ads') revenueMultiplier = impressions / 1000 * periods;
   const lifetimeRevenue = (model === 'ads' ? cpm : price) * revenueMultiplier;
   const ltv = lifetimeRevenue * margin / 100;
+  return valid(lifetimeRevenue, ltv) ? { margin, periods, price, impressions, cpm, revenueMultiplier, lifetimeRevenue, ltv } : null;
+}
+
+export function forecast(values, model, acquisition, customBasis, target = 'budget') {
+  const launchCost = moneyInput(values.launchCost);
+  const traffic = estimateAcquisition(values, acquisition, target);
+  const unit = lifetimeEconomics(values, model);
+  if (!traffic || !unit || !valid(launchCost)) return null;
+  const { budget, users, costPerRegistration } = traffic;
+  const { margin, periods, price, impressions, cpm, revenueMultiplier, lifetimeRevenue, ltv } = unit;
+  const registeredBasis = model === 'ads' || (model === 'custom' && customBasis === 'users');
+  const payerShare = registeredBasis ? null : number(values.conversion) / 100;
+  const freeCost = moneyInput(values.freeCost);
+  if (!registeredBasis && (!valid(payerShare, freeCost) || payerShare > 1)) return null;
+  const guestCount = model === 'ads' ? number(String(values.guestUsers ?? '').trim() || 0) : 0;
+  const guestViews = number(values.guestViews);
+  if (!Number.isSafeInteger(guestCount) || (guestCount > 0 && !valid(guestViews))) return null;
+
   const registrationContribution = registeredBasis ? ltv : payerShare * ltv - (1 - payerShare) * freeCost;
   const customers = registeredBasis ? null : users * payerShare;
   const cac = payerShare > 0 ? costPerRegistration / payerShare : null;

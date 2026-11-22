@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { payments } from './ideas.js';
 import { money, monthOutcome, numeric } from './Format.js';
-import { expenseFields, moneyLimit, monthlyVolumeLabels, number } from './economics.js';
+import { expenseFields, lifetimeEconomics, moneyLimit, monthlyVolumeLabels, number } from './economics.js';
 import { AcquisitionBenchmarks, MonetizationBenchmarks } from './AdBenchmarks.jsx';
 
 function Amount({ name, label, unit, hint, value, onChange, example }) {
@@ -40,19 +40,19 @@ function Result({ result, model, target }) {
   const metrics = [
     ...(result.clicks === null ? [] : [
       ['Клики', numeric.format(result.clicks)], ['Клики без регистрации', numeric.format(result.unregisteredClicks)],
-      ['CPC · цена клика', money(result.cpc)],
+      ['Цена клика (CPC)', money(result.cpc)],
     ]),
     ['Новые зарегистрированные пользователи', numeric.format(result.users)],
     ...(model !== 'ads' ? [] : [
       ['Гости без регистрации, учтённые в прогнозе', numeric.format(result.guestCount)],
       ['Показы рекламы за весь срок', numeric.format(result.adImpressions)],
-      ['Выручка на зарегистрированного за месяц активности', money(result.adRevenuePerUserMonth)],
+      ['Выручка на активного пользователя за месяц (ARPU)', money(result.adRevenuePerUserMonth)],
       ...(result.guestCount > 0 ? [['Выручка от показов гостям', money(result.guestRevenue)]] : []),
     ]),
     ...(result.customers === null ? [] : [['Платящие клиенты', numeric.format(result.customers)]]),
-    ['CPA · регистрация', money(result.costPerRegistration)],
-    ...(result.registeredBasis ? [] : [['CAC · платящий клиент', result.cac === null ? '—' : money(result.cac)]]),
-    [result.registeredBasis ? 'LTV вклада пользователя' : 'LTV вклада плательщика', money(result.ltv)],
+    ['Стоимость регистрации (CPA)', money(result.costPerRegistration)],
+    ...(result.registeredBasis ? [] : [['Стоимость привлечения плательщика (CAC)', result.cac === null ? '—' : money(result.cac)]]),
+    [result.registeredBasis ? 'Вклад пользователя за весь срок (LTV)' : 'Вклад плательщика за весь срок (LTV)', money(result.ltv)],
     ...(result.ltvToCac === null ? [] : [['LTV / CAC', numeric.format(result.ltvToCac) + '×']]),
     ['Выручка за всё время использования', money(result.revenue)],
     ['Вклад после рекламы, до расходов запуска', money(result.afterAds)],
@@ -232,6 +232,7 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
       value={values[name]} onChange={updateAmount} />
   );
   const paid = model !== 'ads' && !(model === 'custom' && customBasis === 'users');
+  const unit = lifetimeEconomics(values, model);
   const stage = (index, preview, children) => (
     <EconomySection index={index} preview={preview} active={active} onSelect={selectSection}>{children}</EconomySection>
   );
@@ -268,7 +269,7 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
           ? amount('cpa', 'Цена регистрации (CPA)', '₽', '103')
           : <>
             {amount('cpc', 'Цена клика (CPC)', '₽', '25')}
-            {amount('registrationRate', 'Доля кликов, которые приводят к регистрации', '%', '20')}
+            {amount('registrationRate', 'Конверсия клика в регистрацию (CR)', '%', '20')}
           </>)}
       </div>
       {target === 'budget' && traffic && <p className="budget-estimate">
@@ -294,15 +295,15 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
         </select>
       </label>}
       <div className="columns amount-grid">
-        {paid && amount('conversion', 'Конверсия регистрации в первую оплату', '%', '5')}
-        {model === 'sale' && amount('price', 'Средняя цена продажи', '₽', '900')}
+        {paid && amount('conversion', 'Конверсия регистрации в первую оплату (CR)', '%', '5')}
+        {model === 'sale' && amount('price', 'Средний чек (AOV)', '₽', '900')}
         {model === 'subscription' && <>
-          {amount('price', 'Цена подписки в месяц', '₽', '160')}
+          {amount('price', 'Средняя выручка с плательщика за месяц (ARPPU)', '₽', '160', 'При одном тарифе укажи цену подписки за месяц.')}
           {amount('periods', 'Среднее число оплаченных месяцев', 'мес.', '3')}
         </>}
         {model === 'commission' && <>
-          {amount('price', 'Средняя сумма сделки', '₽', '1 500')}
-          {amount('rate', 'Доля проекта с каждой сделки', '%', '15')}
+          {amount('price', 'Средняя сумма сделки (AOV)', '₽', '1 500')}
+          {amount('rate', 'Ставка комиссии (take rate)', '%', '15')}
           {amount('periods', 'Сделок на покупателя за всё время', 'шт.', '2', 'Например, если человек в среднем бронирует дважды, введи 2.')}
         </>}
         {model === 'ads' && <>
@@ -315,11 +316,18 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
         </>}
         {model === 'custom' && amount('price', 'Выручка за весь срок жизни', '₽', '700',
           'Средняя сумма по выбранной группе. Можно сложить все источники дохода.')}
-        {amount('margin', 'Доля выручки после переменных расходов', '%', '80',
+        {amount('margin', 'Маржинальность по переменным расходам (Contribution Margin)', '%', '80',
           'Например, если из 100 ₽ остаётся 80 ₽, введи 80.')}
         {paid && amount('freeCost', 'Расход на неплатящего пользователя', '₽', '0',
           'Сумма за весь срок использования.')}
       </div>
+      <aside className="ltv-preview" aria-live="polite">
+        <div>
+          <h4>Вклад {paid ? 'плательщика' : 'пользователя'} за весь срок (LTV)</h4>
+          <p>Выручка с одного {paid ? 'плательщика' : 'пользователя'} за всё время × маржинальность.</p>
+        </div>
+        {unit && <strong>{money(unit.ltv)}</strong>}
+      </aside>
       {model === 'ads' && <>
         <details className="benchmark ad-guests">
           <summary>Учесть показы гостям без регистрации</summary>

@@ -271,3 +271,19 @@ dialog::backdrop { background: #171d14ac; }
   .economy-section-body .amount-grid .field { grid-template-rows: auto; }
   .economy-next { width: 100%; }
 }
+
+.ltv-preview {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 16px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 9px;
+  background: var(--pale);
+  color: var(--green);
+}
+.ltv-preview h4 { margin: 0; font-size: .95rem; }
+.ltv-preview p { margin-top: 4px; font-size: .88rem; }
+.ltv-preview strong { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
