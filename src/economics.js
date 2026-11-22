@@ -13,25 +13,24 @@ export function forecast(values, model, acquisition, customBasis) {
   const { budget, cpc, registrationRate, cpa, conversion, margin, price, periods, rate,
     freeCost, launchCost, impressions, cpm } = fields;
   const fromClicks = acquisition === 'clicks';
-  const registeredBasis = model === 'ads' || (model === 'custom' && customBasis === 'users') || model === 'free';
+  const registeredBasis = model === 'ads' || (model === 'custom' && customBasis === 'users');
   const costPerRegistration = fromClicks ? cpc / (registrationRate / 100) : cpa;
   if (!valid(budget, launchCost, costPerRegistration) || costPerRegistration === 0 || (fromClicks && registrationRate > 100)) return null;
 
   const payerShare = registeredBasis ? null : conversion / 100;
   if (!registeredBasis && (!valid(payerShare, freeCost) || payerShare > 1)) return null;
-  if (model !== 'free' && (!valid(margin) || margin > 100)) return null;
-  if (model !== 'free' && model !== 'ads' && !valid(price)) return null;
+  if (!valid(margin) || margin > 100) return null;
+  if (model !== 'ads' && !valid(price)) return null;
   if (['subscription', 'commission', 'ads'].includes(model) && !valid(periods)) return null;
   if (model === 'commission' && (!valid(rate) || rate > 100)) return null;
   if (model === 'ads' && !valid(impressions, cpm)) return null;
-  if (model === 'free' && !valid(freeCost)) return null;
 
   let revenueMultiplier = 1;
   if (model === 'subscription') revenueMultiplier = periods;
   if (model === 'commission') revenueMultiplier = periods * rate / 100;
   if (model === 'ads') revenueMultiplier = impressions / 1000 * periods;
-  const lifetimeRevenue = model === 'free' ? 0 : (model === 'ads' ? cpm : price) * revenueMultiplier;
-  const ltv = model === 'free' ? -freeCost : lifetimeRevenue * margin / 100;
+  const lifetimeRevenue = (model === 'ads' ? cpm : price) * revenueMultiplier;
+  const ltv = lifetimeRevenue * margin / 100;
   const registrationContribution = registeredBasis ? ltv : payerShare * ltv - (1 - payerShare) * freeCost;
   const users = budget / costPerRegistration;
   const customers = registeredBasis ? null : users * payerShare;
@@ -45,7 +44,7 @@ export function forecast(values, model, acquisition, customBasis) {
   const monetizedShare = registeredBasis ? 1 : payerShare;
   const costOfNonPayers = registeredBasis ? 0 : (1 - payerShare) * freeCost;
   const priceContribution = monetizedShare * margin / 100 * revenueMultiplier;
-  const minPrice = model !== 'free' && priceContribution > 0
+  const minPrice = priceContribution > 0
     ? (costPerRegistration + costOfNonPayers) / priceContribution : null;
   const ltvToCac = cac === null ? null : ltv / cac;
   const monthlyContribution = model === 'subscription' ? price * margin / 100

@@ -4,14 +4,15 @@ import QRCode from 'qrcode';
 import { ideas, payments } from './ideas.js';
 import { forecast, monthlyResult, number } from './economics.js';
 import { Economy } from './Economy.jsx';
-import { money } from './Format.js';
+import { money, monthOutcome } from './Format.js';
 import './style.css';
 
 const storageKey = 'open-project-workshop:v1';
 const previousStorageKey = 'yaroslavl-pet-project-workshop:v1';
+const retiredIdeas = { borrow: 'Соседский прокат', team: 'Сыграем вечером' };
 const defaults = {
   name: '', source: 'bank', ideaId: '', customIdea: '', audience: '', channel: '',
-  model: 'sale', customModel: '', customBasis: 'users', acquisition: 'cpa', step: 1,
+  model: '', customModel: '', customBasis: 'users', acquisition: 'cpa', step: 1,
   numbers: { shared: { budget: '', cpa: '', cpc: '', registrationRate: '', launchCost: '0' } },
   month: { revenue: '', variable: '', ads: '', fixed: '' },
 };
@@ -46,7 +47,11 @@ function readDraft() {
     if (!saved) return defaults;
     return {
       ...defaults, ...saved,
-      model: Object.hasOwn(payments, saved.model) ? saved.model : defaults.model,
+      model: Object.hasOwn(payments, saved.model) ? saved.model : (
+        saved.model === 'free' && saved.source === 'bank'
+          ? ideas.find(({ id }) => id === saved.ideaId)?.model ?? ''
+          : ''
+      ),
       numbers: { ...saved.numbers, shared: { ...defaults.numbers.shared, ...saved.numbers?.shared } },
       month: { ...defaults.month, ...saved.month },
     };
@@ -88,14 +93,15 @@ function App() {
   const stepHeading = useRef(null);
   const dialog = useRef(null);
   const idea = ideas.find(({ id }) => id === draft.ideaId);
-  const title = draft.source === 'own' ? draft.customIdea : idea?.name;
-  const complete = Boolean(draft.name.trim() && title?.trim() && draft.audience.trim());
+  const title = draft.source === 'own' ? draft.customIdea : idea?.name ?? retiredIdeas[draft.ideaId];
+  const complete = Boolean(draft.name.trim() && title?.trim() && draft.audience.trim() && draft.model);
   const step = complete && draft.step === 2 ? 2 : 1;
   const { model, acquisition, customBasis, month } = draft;
-  const modelLabel = model === 'custom' ? draft.customModel.trim() || payments.custom.label : payments[model].label;
+  const modelLabel = model === 'custom' ? draft.customModel.trim() || payments.custom.label : payments[model]?.label ?? '';
   const values = { ...modelDefaults, ...draft.numbers[model], ...draft.numbers.shared };
-  const result = forecast(values, model, acquisition, customBasis);
+  const result = model ? forecast(values, model, acquisition, customBasis) : null;
   const monthly = monthlyResult(month);
+  const monthStatus = monthly === null ? null : monthOutcome(monthly);
   const possibleIdeas = filter === 'Все' ? ideas : ideas.filter(({ format }) => format === filter);
   const shownIdeas = expanded || filter !== 'Все' ? possibleIdeas : possibleIdeas.slice(0, 4);
 
@@ -128,7 +134,8 @@ function App() {
       source,
       audience: previous.profiles?.[source]?.audience ?? '',
       channel: previous.profiles?.[source]?.channel ?? '',
-      model: previous.profiles?.[source]?.model ?? 'sale',
+      model: Object.hasOwn(payments, previous.profiles?.[source]?.model)
+        ? previous.profiles[source].model : source === 'bank' ? idea?.model ?? '' : '',
       profiles: { ...previous.profiles, [previous.source]: {
         audience: previous.audience, channel: previous.channel, model: previous.model,
       } },
@@ -138,7 +145,7 @@ function App() {
 
   function goTo(nextStep) {
     if (nextStep === 2 && !complete) {
-      setError('Заполни имя, выбери идею и укажи аудиторию.');
+      setError('Заполни имя, выбери идею, укажи аудиторию и модель дохода.');
       return;
     }
     update('step', nextStep);
@@ -181,10 +188,14 @@ function App() {
               <h2>{draft.name.trim()}, это твоя страница</h2>
               <span>{storageFailed ? 'Сохранение недоступно' : 'Сохранено в этом браузере'}</span>
             </div>
-            {title?.trim() && <p><strong>{title.trim()}</strong> · {modelLabel}</p>}
+            {title?.trim() && <p><strong>{title.trim()}</strong>{modelLabel && ' · ' + modelLabel}</p>}
             {draft.audience.trim() && <p>Аудитория — {draft.audience.trim()}</p>}
             {complete && result && <p>Вклад когорты после расходов — <strong>{money(result.profit)}</strong></p>}
-            {complete && monthly !== null && <p>Результат месяца — <strong>{money(monthly)}</strong></p>}
+            {complete && monthStatus && (
+              <p className="participant-month" data-tone={monthStatus.tone}>
+                {monthStatus.label} <strong>{money(Math.abs(monthly))}</strong>
+              </p>
+            )}
           </section>
         )}
 
@@ -222,12 +233,12 @@ function App() {
                   <div className="idea-grid">
                     {shownIdeas.map((item) => (
                       <button type="button" className="idea" key={item.id} aria-pressed={idea?.id === item.id} onClick={() => selectIdea(item)}>
-                        <span className="format">{item.format}</span><strong>{item.name}</strong><span>{item.description}</span>
+                        <span className="format">{item.format}</span><strong>{item.name}</strong><span>{item.description}</span><span className="monetization">{item.monetization}</span>
                       </button>
                     ))}
                   </div>
                   {filter === 'Все' && <button type="button" className="quiet more" onClick={() => setExpanded(!expanded)}>{expanded ? 'Свернуть список' : 'Показать все 10 идей'}</button>}
-                  {idea && <p className="selection">Выбрано: <strong>{idea.name}</strong></p>}
+                  {title && <p className="selection">Выбрано: <strong>{title}</strong></p>}
                 </>
               )}
             </div>

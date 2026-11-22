@@ -1,6 +1,8 @@
 import React from 'react';
 import { payments } from './ideas.js';
-import { money, numeric } from './Format.js';
+import { money, monthOutcome, numeric } from './Format.js';
+import { number } from './economics.js';
+import { AcquisitionBenchmarks, MonetizationBenchmarks } from './AdBenchmarks.jsx';
 
 function Amount({ name, label, unit, hint, value, onChange, example }) {
   return (
@@ -37,11 +39,11 @@ function Result({ result, model }) {
     ...(result.customers === null ? [] : [['Платящие клиенты', numeric.format(result.customers)]]),
     ['CPA · регистрация', money(result.costPerRegistration)],
     ...(result.registeredBasis ? [] : [['CAC · платящий клиент', result.cac === null ? '—' : money(result.cac)]]),
-    ...(model === 'free' ? [] : [[result.registeredBasis ? 'LTV вклада пользователя' : 'LTV вклада плательщика', money(result.ltv)]]),
+    [result.registeredBasis ? 'LTV вклада пользователя' : 'LTV вклада плательщика', money(result.ltv)],
     ...(result.ltvToCac === null ? [] : [['LTV / CAC', numeric.format(result.ltvToCac) + '×']]),
     ['Выручка за срок жизни когорты', money(result.revenue)],
     ['Вклад после рекламы, до расходов запуска', money(result.afterAds)],
-    ...(model === 'free' ? [] : [['Предельный CPA до расходов запуска', money(result.maxCpa)]]),
+    ['Предельный CPA до расходов запуска', money(result.maxCpa)],
     ...(result.minPrice === null ? [] : [[costLabel + ' до расходов запуска', money(result.minPrice)]]),
     ...(result.payback === null ? [] : [['Окупаемость привлечения', numeric.format(result.payback) + ' мес.' +
       (result.paybackWithinLifetime ? '' : ' · дольше срока жизни')]]),
@@ -52,13 +54,39 @@ function Result({ result, model }) {
       <strong className="profit">{money(result.profit)}</strong>
       <p className="profit-caption">Вклад за срок жизни после рекламы и расходов запуска</p>
       <dl>{metrics.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-      <p className="breakeven">{model === 'free'
-        ? 'В этой модели есть расходы на привлечение и обслуживание. Сравнивай сценарии по CPA.'
-        : result.breakEvenBudget === null
+      <p className="breakeven">{result.breakEvenBudget === null
           ? 'При этих вводных увеличение рекламного бюджета не принесёт прибыль.'
           : result.breakEvenBudget === 0
             ? 'Вклад с пользователя покрывает его привлечение. Расходы запуска равны нулю.'
             : 'Бюджет для выхода в ноль — около ' + money(result.breakEvenBudget) + ' при том же CPA и той же конверсии.'}</p>
+    </div>
+  );
+}
+
+const monthFields = [
+  ['revenue', 'Выручка за месяц'],
+  ['variable', 'Переменные расходы'],
+  ['ads', 'Расходы на рекламу'],
+  ['fixed', 'Постоянные расходы'],
+];
+
+function MonthResult({ month, monthly }) {
+  if (monthly === null) return null;
+
+  const { label, tone } = monthOutcome(monthly);
+  const revenue = number(month.revenue);
+  const totalCosts = monthFields.slice(1).reduce((sum, [key]) => sum + number(month[key]), 0);
+
+  return (
+    <div className="month-result" data-tone={tone}>
+      <div className="month-outcome">
+        <p>{label}</p>
+        <strong>{money(Math.abs(monthly))}</strong>
+      </div>
+      <dl className="month-breakdown">
+        <div><dt>Выручка</dt><dd>{money(revenue)}</dd></div>
+        <div><dt>Расходы</dt><dd>{money(totalCosts)}</dd></div>
+      </dl>
     </div>
   );
 }
@@ -68,7 +96,7 @@ export function Economy({ model, acquisition, customBasis, values, update, updat
     <Amount name={name} label={label} unit={unit} example={example} hint={hint}
       value={values[name]} onChange={updateAmount} />
   );
-  const paid = model !== 'ads' && model !== 'free' && !(model === 'custom' && customBasis === 'users');
+  const paid = model !== 'ads' && !(model === 'custom' && customBasis === 'users');
 
   return (
     <>
@@ -92,6 +120,7 @@ export function Economy({ model, acquisition, customBasis, values, update, updat
               </>}
             {amount('launchCost', 'Разовые расходы на запуск', '₽', '0')}
           </div>
+          <AcquisitionBenchmarks />
 
           <div className="section">
             <h3>{payments[model].label}</h3>
@@ -121,30 +150,31 @@ export function Economy({ model, acquisition, customBasis, values, update, updat
               </>}
               {model === 'custom' && amount('price', 'Выручка за весь срок жизни', '₽', '700',
                 'Средняя сумма по выбранной группе. Можно сложить все источники дохода.')}
-              {model !== 'free' && amount('margin', 'Доля выручки после переменных расходов', '%', '80',
+              {amount('margin', 'Доля выручки после переменных расходов', '%', '80',
                 'Например, если из 100 ₽ остаётся 80 ₽, введи 80.')}
-              {(paid || model === 'free') && amount('freeCost', paid ? 'Расход на неплатящего пользователя' : 'Расход на пользователя', '₽', '0',
+              {paid && amount('freeCost', 'Расход на неплатящего пользователя', '₽', '0',
                 'Сумма за весь срок использования.')}
             </div>
+            {model === 'ads' && <MonetizationBenchmarks />}
           </div>
         </div>
         <Result result={result} model={model} />
       </div>
 
-      <details className="month">
-        <summary>Результат бизнеса за месяц</summary>
-        <p>Введи поступления и расходы этого месяца по всем клиентам. Прогноз LTV когорты сюда не входит.</p>
-        <div className="columns amount-grid">
-          {[
-            ['revenue', 'Выручка за месяц'],
-            ['variable', 'Переменные расходы'],
-            ['ads', 'Расходы на рекламу'],
-            ['fixed', 'Постоянные расходы'],
-          ].map(([name, label]) => <Amount key={name} name={'month-' + name} label={label} unit="₽" example="0"
-            value={month[name]} onChange={(_, value) => updateMonth(name, value)} />)}
+      <section className="month" aria-labelledby="month-title">
+        <h3 id="month-title">Результат бизнеса за месяц</h3>
+        <details>
+          <summary>Выручка и расходы</summary>
+          <p className="month-intro">Укажи четыре суммы за один и тот же месяц. Если статьи расходов не было, поставь 0.</p>
+          <div className="columns amount-grid">
+            {monthFields.map(([name, label]) => <Amount key={name} name={'month-' + name} label={label} unit="₽"
+              example="0" value={month[name]} onChange={(_, value) => updateMonth(name, value)} />)}
+          </div>
+        </details>
+        <div aria-live="polite" aria-atomic="true">
+          <MonthResult month={month} monthly={monthly} />
         </div>
-        <p className="monthly-result">{monthly === null ? 'Заполни все четыре суммы. Если расходов не было, поставь 0.' : 'Результат месяца — ' + money(monthly)}</p>
-      </details>
+      </section>
     </>
   );
 }
