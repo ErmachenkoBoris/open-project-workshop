@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
 import { ideas, payments } from './ideas.js';
-import { estimateAcquisition, estimateExpenses, estimateMonthlyRevenue, forecast, moneyInput, monthlyResult, number } from './economics.js';
+import { estimateAcquisition, estimateExpenses, forecast, monthForecast, number } from './economics.js';
 import { Economy } from './Economy.jsx';
 import { money, monthOutcome } from './Format.js';
 import './style.css';
@@ -15,11 +15,11 @@ const defaults = {
   name: '', source: 'bank', ideaId: '', customIdea: '', audience: '', channel: '',
   model: '', customModel: '', customBasis: 'users', acquisition: 'cpa', target: 'budget', expenseMode: 'total', expenses: {}, step: 1,
   numbers: { shared: { budget: '', targetUsers: '', monthlyPlan: '', cpa: '', cpc: '', registrationRate: '', launchCost: '0' } },
-  month: { revenue: '', variable: '', ads: '', fixed: '', period: 'launch', revenueMode: 'manual' },
+  month: { revenue: '', variable: '', ads: '', fixed: '', period: 'launch', revenueSource: 'forecast', guestImpressions: '' },
 };
 const modelDefaults = {
   price: '', rate: '', conversion: '', periods: '', margin: '100', freeCost: '0',
-  impressions: '', cpm: '', guestUsers: '', guestViews: '',
+  impressions: '', cpm: '', guestUsers: '', guestViews: '', firstMonthShare: '',
 };
 
 function migrateDraft(saved) {
@@ -40,6 +40,17 @@ function migrateDraft(saved) {
   };
 }
 
+function restoreMonth(saved, model) {
+  const { revenueMode, ...month } = saved ?? {};
+  let source = month.revenueSource ?? 'forecast';
+  if (!month.revenueSource && revenueMode === 'model' && String(month['volume-' + model] ?? '').trim()) {
+    source = 'volume';
+  } else if (!month.revenueSource && revenueMode !== 'model' && String(month.revenue ?? '').trim()) {
+    source = 'manual';
+  }
+  return { ...defaults.month, ...month, revenueSource: source };
+}
+
 function readDraft() {
   try {
     const current = JSON.parse(localStorage.getItem(storageKey));
@@ -54,7 +65,7 @@ function readDraft() {
           : ''
       ),
       numbers: { ...saved.numbers, shared: { ...defaults.numbers.shared, ...saved.numbers?.shared } },
-      month: { ...defaults.month, ...saved.month },
+      month: restoreMonth(saved.month, saved.model),
     };
   } catch {
     return defaults;
@@ -103,11 +114,7 @@ function App() {
   const costPlan = estimateExpenses(expenses, expenseMode, values.launchCost, values.monthlyPlan);
   const result = model ? forecast({ ...values, launchCost: costPlan.upfront }, model, acquisition, customBasis, target) : null;
   const traffic = estimateAcquisition(values, acquisition, target);
-  const plannedAds = target === 'budget' ? moneyInput(values.budget)
-    : target === 'organic' ? 0 : traffic?.budget ?? NaN;
-  const modeledRevenue = month.revenueMode === 'model' && model !== 'custom';
-  const monthRevenue = modeledRevenue ? estimateMonthlyRevenue(model, values, month['volume-' + model]) : moneyInput(month.revenue);
-  const monthReport = monthlyResult(month, costPlan, plannedAds, month.period, monthRevenue);
+  const monthReport = monthForecast(values, model, customBasis, traffic, target, costPlan, month);
   const monthStatus = monthReport.profit === null ? null : monthOutcome(monthReport.profit);
   const possibleIdeas = filter === 'Все' ? ideas : ideas.filter(({ format }) => format === filter);
   const shownIdeas = expanded || filter !== 'Все' ? possibleIdeas : possibleIdeas.filter(({ id }) => featuredIdeas.includes(id));
@@ -301,7 +308,7 @@ function App() {
             <Economy model={model} acquisition={acquisition} target={target} customBasis={customBasis} values={values}
               expenseMode={expenseMode} expenses={expenses} costPlan={costPlan} updateExpense={updateExpense}
               update={update} updateAmount={updateAmount} result={result} month={month} updateMonth={updateMonth}
-              monthReport={monthReport} modeledRevenue={modeledRevenue} traffic={traffic} plannedAds={plannedAds} />
+              monthReport={monthReport} traffic={traffic} />
             <aside className="pair">
               <h3>Сравните сценарии в паре</h3>
               <p>Поменяйте одно число. Сколько можно платить за нового пользователя? Какой бюджет готовы выделить на тест и что станет поводом его остановить?</p>

@@ -82,11 +82,12 @@ function Result({ result, model, target }) {
 
 function MonthResult({ report, month }) {
   const label = (value) => Number.isFinite(value) ? money(value) : 'Нужно указать';
+  const manual = report.source === 'manual';
   const rows = [
-    ['Выручка месяца', report.revenue],
-    ['Переменные расходы месяца', report.variable],
-    [month.ads.trim() ? 'Реклама · своя сумма' : 'Реклама · из раздела привлечения', report.ads],
-    [month.fixed.trim() ? 'Регулярные расходы · своя сумма' : 'Регулярные расходы · из сметы', report.fixed],
+    [manual ? 'Выручка · введена вручную' : 'Выручка · по модели дохода', report.revenue],
+    [manual ? 'Себестоимость и комиссии' : 'Себестоимость и комиссии · по маржинальности', report.variable],
+    [manual && month.ads.trim() ? 'Реклама · сохранённая сумма' : 'Реклама · из раздела привлечения', report.ads],
+    [manual && month.fixed.trim() ? 'Регулярные расходы · сохранённая сумма' : 'Регулярные расходы · из сметы', report.fixed],
     ...(month.period === 'launch' ? [['Разовые расходы · из сметы', report.upfront]] : []),
     ['Всего расходов', report.expenses ?? NaN],
   ];
@@ -95,7 +96,7 @@ function MonthResult({ report, month }) {
   return (
     <div className="month-result" data-tone={status?.tone} aria-live="polite" aria-atomic="true">
       <div className="month-outcome">
-        <p>{status?.label ?? 'Итог появится после ввода выручки и расходов'}</p>
+        <p>{status?.label ?? 'Итог появится, когда будут заполнены вводные'}</p>
         {status && <strong>{money(Math.abs(report.profit))}</strong>}
       </div>
       <dl className="month-breakdown">
@@ -105,7 +106,17 @@ function MonthResult({ report, month }) {
   );
 }
 
-function MonthForm({ month, model, modeledRevenue, updateMonth, report, costPlan, plannedAds }) {
+const monthAssumptions = {
+  sale: 'Новые регистрации × конверсия в оплату × средний чек. Считаем одну покупку на плательщика в этом месяце.',
+  subscription: 'Новые регистрации × конверсия в оплату × выручка за первый месяц подписки.',
+  commission: 'Новые регистрации × конверсия в оплату × комиссия с первой сделки в этом месяце.',
+  ads: 'Новые регистрации × показы на пользователя за месяц × выручка за тысячу показов ÷ 1 000.',
+  custom: 'Выручка за весь срок × доля выручки, ожидаемая в этом месяце, × число пользователей или плательщиков.',
+};
+
+function MonthForm({ month, model, updateMonth, report, traffic, values }) {
+  const revenueSource = report.source;
+  const savedVolume = month['volume-' + model] ?? '';
   const field = (name, label, hint) => <Amount name={'month-' + name} label={label} unit="₽" example="0"
     value={month[name]} hint={hint} onChange={(_, value) => updateMonth(name, value)} />;
   return (
@@ -117,32 +128,53 @@ function MonthForm({ month, model, modeledRevenue, updateMonth, report, costPlan
       <p className="month-intro">{month.period === 'launch'
         ? 'В месяц запуска разовые расходы из сметы входят в итог.'
         : 'В обычный месяц учитываются текущие расходы. Расходы на запуск относятся к первому месяцу.'}</p>
-      {model !== 'custom' && <label className="field month-revenue-mode">
-        <span>Как указать выручку месяца?</span>
-        <select value={month.revenueMode} onChange={(event) => updateMonth('revenueMode', event.target.value)}>
-          <option value="manual">Ввести выручку за месяц</option>
-          <option value="model">Посчитать по модели дохода</option>
+      <label className="field month-revenue-mode">
+        <span>Откуда берётся выручка месяца?</span>
+        <select value={revenueSource} onChange={(event) => updateMonth('revenueSource', event.target.value)}>
+          <option value="forecast">Посчитать по модели дохода</option>
+          <option value="manual">Ввести выручку за месяц вручную</option>
+          {model !== 'custom' && (revenueSource === 'volume' || savedVolume.trim()) && <option value="volume">Использовать сохранённый объём</option>}
         </select>
-      </label>}
-      <div className="columns amount-grid">
-        {modeledRevenue ? <Amount name="month-volume" label={monthlyVolumeLabels[model]} unit="шт."
-          value={month['volume-' + model] ?? ''} example="0"
-          hint="Выручка считается по цене из раздела «Модель дохода»."
-          onChange={(_, value) => updateMonth('volume-' + model, value)} />
-          : field('revenue', 'Выручка этого месяца', 'Укажи ожидаемые или фактические поступления. Если выручки нет, введи 0.')}
-        {field('variable', 'Переменные расходы этого месяца', 'Например, себестоимость заказов или комиссия за платежи.')}
-      </div>
-      <details className="month-overrides">
-        <summary>Указать свои суммы рекламы и регулярных расходов</summary>
-        <div className="columns amount-grid">
-          {field('ads', 'Реклама за месяц', Number.isFinite(plannedAds)
-            ? 'Пустое поле подставит ' + money(plannedAds) + ' из раздела привлечения.'
-            : 'Укажи сумму здесь или задай бюджет в разделе привлечения.')}
-          {field('fixed', 'Регулярные расходы за месяц', Number.isFinite(costPlan.monthly)
-            ? 'Пустое поле подставит ' + money(costPlan.monthly) + ' из сметы.'
-            : 'Проверь сумму регулярных расходов в смете.')}
+      </label>
+      {revenueSource === 'forecast' && <>
+        <div className="month-formula">
+          <p>{monthAssumptions[model]}</p>
+          {traffic && <p>Ожидаемые регистрации за месяц <strong>{numeric.format(traffic.users)}</strong></p>}
+          {['sale', 'subscription', 'commission'].includes(model) && Number.isFinite(report.volume) && (
+            <p>{model === 'sale' ? 'Ожидаемые продажи' : model === 'commission' ? 'Ожидаемые первые сделки' : 'Ожидаемые первые оплаты'}{' '}
+              <strong>{numeric.format(report.volume)}</strong></p>
+          )}
+          <p>Прогноз учитывает новых пользователей этого месяца.</p>
         </div>
-      </details>
+        {model === 'ads' && (number(values.guestUsers) > 0 || month.guestImpressions.trim()) && <details className="month-overrides">
+          <summary>Добавить показы гостям в этом месяце</summary>
+          <Amount name="month-guest-impressions" label="Показов гостям за месяц" unit="шт." example="0"
+            value={month.guestImpressions} onChange={(_, value) => updateMonth('guestImpressions', value)} />
+        </details>}
+      </>}
+      {revenueSource === 'volume' && <div className="columns amount-grid">
+        <Amount name="month-volume" label={monthlyVolumeLabels[model]} unit="шт."
+          value={savedVolume} example="0"
+          hint="Подойдёт, если фактический объём отличается от прогноза. Цена берётся из модели дохода."
+          onChange={(_, value) => updateMonth('volume-' + model, value)} />
+      </div>}
+      {revenueSource === 'manual' && <>
+        <div className="columns amount-grid">
+          {field('revenue', 'Выручка этого месяца', 'Укажи фактические поступления. Если выручки нет, введи 0.')}
+        </div>
+        <details className="month-overrides">
+          <summary>Уточнить себестоимость и комиссии этого месяца</summary>
+          <div className="columns amount-grid">
+            {field('variable', 'Себестоимость и комиссии этого месяца', 'Например, расходы на изготовление заказов и приём платежей.')}
+          </div>
+        </details>
+        {(month.ads.trim() || month.fixed.trim()) && <p className="month-intro">
+          Для ручного режима используются суммы расходов, сохранённые в прежней версии.{' '}
+          <button type="button" className="quiet" onClick={() => { updateMonth('ads', ''); updateMonth('fixed', ''); }}>
+            Брать суммы из предыдущих шагов
+          </button>
+        </p>}
+      </>}
       <MonthResult report={report} month={month} />
     </>
   );
@@ -220,7 +252,7 @@ function EconomySection({ index, active, onSelect, preview, children }) {
 }
 
 export function Economy({ model, acquisition, target, customBasis, values, expenseMode, expenses,
-  costPlan, updateExpense, update, updateAmount, result, month, updateMonth, monthReport, modeledRevenue, traffic, plannedAds }) {
+  costPlan, updateExpense, update, updateAmount, result, month, updateMonth, monthReport, traffic }) {
   const [active, setActive] = useState(0);
   const flow = useRef(null);
   function selectSection(index, focus) {
@@ -314,13 +346,22 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
           {amount('periods', 'Сколько месяцев человек пользуется продуктом', 'мес.', '3',
             'Если люди в среднем перестают заходить через три месяца, введи 3.')}
         </>}
-        {model === 'custom' && amount('price', 'Выручка за весь срок жизни', '₽', '700',
-          'Средняя сумма по выбранной группе. Можно сложить все источники дохода.')}
+        {model === 'custom' && <>
+          {amount('price', 'Выручка за весь срок жизни', '₽', '700',
+            'Средняя сумма по выбранной группе. Можно сложить все источники дохода.')}
+          {amount('firstMonthShare', 'Доля выручки, которую ожидаешь в первый месяц', '%', '25',
+            'Нужна для прогноза месяца. Например, введи 25, если ожидаешь получить четверть всей суммы сразу.')}
+        </>}
         {amount('margin', 'Маржинальность по переменным расходам (Contribution Margin)', '%', '80',
-          'Например, если из 100 ₽ остаётся 80 ₽, введи 80.')}
-        {paid && amount('freeCost', 'Расход на неплатящего пользователя', '₽', '0',
-          'Сумма за весь срок использования.')}
+          'Сколько остаётся после себестоимости и комиссий. Например, если из 100 ₽ остаётся 80 ₽, введи 80.')}
       </div>
+      {paid && <details className="month-overrides">
+        <summary>Учесть расходы на неплательщиков за весь срок</summary>
+        <div className="columns amount-grid">
+          {amount('freeCost', 'Расход на одного неплательщика', '₽', '0',
+            'Входит в расчёт за всё время использования.')}
+        </div>
+      </details>}
       <aside className="ltv-preview" aria-live="polite">
         <div>
           <h4>Вклад {paid ? 'плательщика' : 'пользователя'} за весь срок (LTV)</h4>
@@ -342,8 +383,8 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
         <MonetizationBenchmarks />
       </>}
       </>)}
-      {stage(3, monthSummary, <MonthForm month={month} model={model} modeledRevenue={modeledRevenue} updateMonth={updateMonth}
-        report={monthReport} costPlan={costPlan} plannedAds={plannedAds} />)}
+      {stage(3, monthSummary, <MonthForm month={month} model={model} updateMonth={updateMonth}
+        report={monthReport} traffic={traffic} values={values} />)}
       <details className="lifetime-details">
         <summary>Прогноз за весь срок использования · LTV и окупаемость</summary>
         <p>Здесь считаем вклад новых пользователей за всё время, которое они пользуются продуктом. Для итога одного месяца используй раздел выше.</p>

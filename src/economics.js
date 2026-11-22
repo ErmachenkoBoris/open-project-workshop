@@ -11,8 +11,8 @@ export function moneyInput(value) {
   return parsed <= moneyLimit ? parsed : NaN;
 }
 
-function optionalMoney(value) {
-  return String(value ?? '').trim() ? moneyInput(value) : 0;
+function optionalMoney(value, fallback = 0) {
+  return String(value ?? '').trim() ? moneyInput(value) : fallback;
 }
 
 function valid(...values) {
@@ -145,23 +145,73 @@ export const monthlyVolumeLabels = {
   ads: 'Показов рекламы за месяц',
 };
 
-export function estimateMonthlyRevenue(model, values, volume) {
-  const count = number(volume);
-  if (!Number.isSafeInteger(count) || !Number.isFinite(count)) return NaN;
-  if (model === 'ads') return moneyInput(values.cpm) * count / 1000;
+function revenuePerEvent(values, model) {
+  if (model === 'ads') return moneyInput(values.cpm) / 1000;
+
   const price = moneyInput(values.price);
-  if (model !== 'commission') return price * count;
+  if (model !== 'commission') return price;
   const rate = number(values.rate);
-  return rate <= 100 ? price * count * rate / 100 : NaN;
+  return rate <= 100 ? price * rate / 100 : NaN;
 }
 
-export function monthlyResult(values, costPlan, plannedAds, period, revenue = moneyInput(values.revenue)) {
-  const has = (field) => String(values[field] ?? '').trim() !== '';
-  const variable = optionalMoney(values.variable);
-  const ads = has('ads') ? moneyInput(values.ads) : plannedAds;
-  const fixed = has('fixed') ? moneyInput(values.fixed) : costPlan.monthly;
-  const upfront = period === 'launch' ? costPlan.upfront : 0;
-  const expenses = valid(variable, ads, fixed, upfront) ? variable + ads + fixed + upfront : null;
-  const profit = valid(revenue) && expenses !== null ? Math.round((revenue - expenses) * 100) / 100 : null;
-  return { revenue, variable, ads, fixed, upfront, expenses, profit };
+function campaignMonth(values, model, customBasis, traffic) {
+  if (!traffic) return null;
+
+  const { users } = traffic;
+  const conversion = number(values.conversion);
+  const payers = conversion <= 100 ? users * conversion / 100 : NaN;
+  const firstPeriod = Math.min(1, number(values.periods));
+  if (model === 'custom') {
+    const share = number(values.firstMonthShare);
+    const audience = customBasis === 'users' ? users : payers;
+    const revenue = share <= 100 ? audience * moneyInput(values.price) * share / 100 : NaN;
+    return { revenue, volume: null };
+  }
+  if (model === 'ads') {
+    const volume = users * number(values.impressions) * firstPeriod;
+    return { revenue: volume * revenuePerEvent(values, model), volume };
+  }
+
+  const volume = model === 'sale' ? payers : payers * firstPeriod;
+  return { revenue: volume * revenuePerEvent(values, model), volume };
+}
+
+function cents(value) {
+  const rounded = Math.round((value + Number.EPSILON) * 100);
+  return Number.isSafeInteger(rounded) ? rounded : NaN;
+}
+
+export function monthForecast(values, model, customBasis, traffic, target, costPlan, month) {
+  const source = model === 'custom' && month.revenueSource === 'volume' ? 'forecast' : month.revenueSource;
+  const manual = source === 'manual';
+  const campaign = source === 'forecast' ? campaignMonth(values, model, customBasis, traffic) : null;
+  const savedVolume = number(month['volume-' + model]);
+  const guests = model === 'ads' && source === 'forecast' ? number(month.guestImpressions || 0) : 0;
+  const guestRevenue = guests === 0 ? 0
+    : Number.isSafeInteger(guests) ? guests * revenuePerEvent(values, 'ads') : NaN;
+  let revenue = moneyInput(month.revenue);
+  if (source === 'forecast') revenue = (campaign?.revenue ?? NaN) + guestRevenue;
+  if (source === 'volume') {
+    revenue = Number.isSafeInteger(savedVolume) ? savedVolume * revenuePerEvent(values, model) : NaN;
+  }
+
+  const plannedAds = target === 'budget' ? moneyInput(values.budget)
+    : target === 'organic' ? 0 : traffic?.budget ?? NaN;
+  const margin = number(values.margin);
+  const variable = manual ? optionalMoney(month.variable)
+    : margin <= 100 ? revenue * (100 - margin) / 100 : NaN;
+  const ads = manual ? optionalMoney(month.ads, plannedAds) : plannedAds;
+  const fixed = manual ? optionalMoney(month.fixed, costPlan.monthly) : costPlan.monthly;
+  const upfront = month.period === 'launch' ? costPlan.upfront : 0;
+
+  const revenueCents = cents(revenue);
+  const [variableCents, adsCents, fixedCents, upfrontCents] = [variable, ads, fixed, upfront].map(cents);
+  const totalCents = variableCents + adsCents + fixedCents + upfrontCents;
+  const expenses = Number.isSafeInteger(totalCents) ? totalCents / 100 : null;
+  const profit = expenses !== null && Number.isSafeInteger(revenueCents) ? (revenueCents - totalCents) / 100 : null;
+  return {
+    source, volume: campaign?.volume ?? null, revenue: revenueCents / 100,
+    variable: variableCents / 100, ads: adsCents / 100, fixed: fixedCents / 100, upfront: upfrontCents / 100,
+    expenses, profit,
+  };
 }
