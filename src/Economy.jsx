@@ -1,23 +1,57 @@
 import React, { useRef, useState } from 'react';
 import { payments } from './ideas.js';
-import { money, monthOutcome, numeric } from './Format.js';
+import { groupMoneyInput, money, monthOutcome, numeric } from './Format.js';
 import { expenseFields, lifetimeEconomics, moneyLimit, monthlyVolumeLabels, number } from './economics.js';
 import { AcquisitionBenchmarks, MonetizationBenchmarks } from './AdBenchmarks.jsx';
 
 function Amount({ name, label, unit, hint, value, onChange, example }) {
-  const overLimit = unit.startsWith('₽') && number(value) > moneyLimit;
+  const isMoney = unit.startsWith('₽');
+  const overLimit = isMoney && number(value) > moneyLimit;
   const description = [hint && name + '-hint', overLimit && name + '-error'].filter(Boolean).join(' ');
+  function change(event) {
+    const input = event.currentTarget;
+    if (!isMoney) {
+      onChange(name, input.value);
+      return;
+    }
+
+    const ungroup = (text) => text.replace(/\s+/g, '');
+    let raw = ungroup(input.value);
+    let cursor = ungroup(input.value.slice(0, input.selectionStart ?? input.value.length)).length;
+    if (raw === ungroup(String(value ?? ''))) {
+      const action = event.nativeEvent.inputType;
+      if (action === 'deleteContentBackward' && cursor > 0) {
+        raw = raw.slice(0, cursor - 1) + raw.slice(cursor);
+        cursor -= 1;
+      } else if (action === 'deleteContentForward' && cursor < raw.length) {
+        raw = raw.slice(0, cursor) + raw.slice(cursor + 1);
+      }
+    }
+
+    const display = groupMoneyInput(raw);
+    if (input.value !== display) {
+      input.value = display;
+      let offset = 0;
+      while (offset < display.length && cursor > 0) {
+        if (!/\s/.test(display[offset])) cursor -= 1;
+        offset += 1;
+      }
+      input.setSelectionRange(offset, offset);
+    }
+    onChange(name, raw);
+  }
+
   return (
     <label className="field">
       <span>{label}</span>
       <span className="input-with-unit">
-        <input name={name} inputMode="decimal" value={value} placeholder={example}
+        <input name={name} inputMode="decimal" value={isMoney ? groupMoneyInput(value) : value} placeholder={example}
           maxLength={24} aria-invalid={overLimit || undefined} aria-describedby={description || undefined}
-          onChange={(event) => onChange(name, event.target.value)} />
+          onChange={change} />
         <span aria-hidden="true">{unit}</span>
       </span>
       {hint && <small id={name + '-hint'}>{hint}</small>}
-      {overLimit && <small id={name + '-error'} className="field-error">Максимум {money(moneyLimit)}.</small>}
+      {overLimit && <small id={name + '-error'} className="field-error">Максимум <span className="money-value">{money(moneyLimit)}</span>.</small>}
     </label>
   );
 }
@@ -58,13 +92,15 @@ function Result({ result, model, target }) {
     ['Вклад после рекламы, до расходов запуска', money(result.afterAds)],
     ...(result.maxCpa === null ? [] : [['Предельный CPA до расходов запуска', money(result.maxCpa)]]),
     ...(result.minPrice === null ? [] : [[costLabel + ' до расходов запуска', money(result.minPrice)]]),
-    ...(result.payback === null ? [] : [['Окупаемость привлечения', numeric.format(result.payback) + ' мес.' +
-      (result.paybackWithinLifetime ? '' : ' · дольше срока жизни')]]),
+    ...(result.payback === null ? [] : [[
+      result.paybackWithinLifetime ? 'Окупаемость привлечения' : 'Окупаемость привлечения (дольше срока жизни)',
+      numeric.format(result.payback) + ' мес.',
+    ]]),
   ];
   return (
     <div className="results lifetime-result" aria-live="polite" aria-atomic="true">
       <h4>Прогноз за всё время использования</h4>
-      <strong className="profit">{money(result.profit)}</strong>
+      <strong className="profit money-value">{money(result.profit)}</strong>
       <p className="profit-caption">Вклад за срок жизни после рекламы и расходов запуска</p>
       <dl>{metrics.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
       <p className="breakeven">{!result.scalable
@@ -75,7 +111,7 @@ function Result({ result, model, target }) {
             ? 'Вклад с пользователя покрывает его привлечение. Разовые расходы равны нулю.'
             : organic
               ? 'Для выхода в ноль нужно привлечь ' + numeric.format(Math.ceil(result.breakEvenUsers)) + ' новых пользователей при тех же вводных.'
-              : 'Бюджет для выхода в ноль — около ' + money(result.breakEvenBudget) + ' при той же стоимости и структуре аудитории.'}</p>
+              : <>Бюджет для выхода в ноль — около <span className="money-value">{money(result.breakEvenBudget)}</span> при той же стоимости и структуре аудитории.</>}</p>
     </div>
   );
 }
@@ -84,11 +120,11 @@ function MonthResult({ report, month }) {
   const label = (value) => Number.isFinite(value) ? money(value) : 'Нужно указать';
   const manual = report.source === 'manual';
   const rows = [
-    [manual ? 'Выручка · введена вручную' : 'Выручка · по модели дохода', report.revenue],
-    [manual ? 'Себестоимость и комиссии' : 'Себестоимость и комиссии · по маржинальности', report.variable],
-    [manual && month.ads.trim() ? 'Реклама · сохранённая сумма' : 'Реклама · из раздела привлечения', report.ads],
-    [manual && month.fixed.trim() ? 'Регулярные расходы · сохранённая сумма' : 'Регулярные расходы · из сметы', report.fixed],
-    ...(month.period === 'launch' ? [['Разовые расходы · из сметы', report.upfront]] : []),
+    ['Выручка', report.revenue, manual ? 'Введена вручную' : 'По модели дохода'],
+    ['Себестоимость и комиссии', report.variable, manual ? '' : 'По маржинальности'],
+    ['Реклама', report.ads, manual && month.ads.trim() ? 'Сохранённая сумма' : 'Из раздела привлечения'],
+    ['Регулярные расходы', report.fixed, manual && month.fixed.trim() ? 'Сохранённая сумма' : 'Из сметы'],
+    ...(month.period === 'launch' ? [['Разовые расходы', report.upfront, 'Из сметы']] : []),
     ['Всего расходов', report.expenses ?? NaN],
   ];
   const status = report.profit === null ? null : monthOutcome(report.profit);
@@ -97,10 +133,15 @@ function MonthResult({ report, month }) {
     <div className="month-result" data-tone={status?.tone} aria-live="polite" aria-atomic="true">
       <div className="month-outcome">
         <p>{status?.label ?? 'Итог появится, когда будут заполнены вводные'}</p>
-        {status && <strong>{money(Math.abs(report.profit))}</strong>}
+        {status && <strong className="money-value">{money(Math.abs(report.profit))}</strong>}
       </div>
       <dl className="month-breakdown">
-        {rows.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{label(value)}</dd></div>)}
+        {rows.map(([name, value, source]) => (
+          <div key={name}>
+            <dt>{name}{source && <small>{source}</small>}</dt>
+            <dd>{label(value)}</dd>
+          </div>
+        ))}
       </dl>
     </div>
   );
@@ -139,11 +180,15 @@ function MonthForm({ month, model, updateMonth, report, traffic, values }) {
       {revenueSource === 'forecast' && <>
         <div className="month-formula">
           <p>{monthAssumptions[model]}</p>
-          {traffic && <p>Ожидаемые регистрации за месяц <strong>{numeric.format(traffic.users)}</strong></p>}
-          {['sale', 'subscription', 'commission'].includes(model) && Number.isFinite(report.volume) && (
-            <p>{model === 'sale' ? 'Ожидаемые продажи' : model === 'commission' ? 'Ожидаемые первые сделки' : 'Ожидаемые первые оплаты'}{' '}
-              <strong>{numeric.format(report.volume)}</strong></p>
-          )}
+          {traffic && <dl className="month-counts">
+            <div><dt>Ожидаемые регистрации за месяц</dt><dd>{numeric.format(traffic.users)}</dd></div>
+            {['sale', 'subscription', 'commission'].includes(model) && Number.isFinite(report.volume) && (
+              <div>
+                <dt>{model === 'sale' ? 'Ожидаемые продажи' : model === 'commission' ? 'Ожидаемые первые сделки' : 'Ожидаемые первые оплаты'}</dt>
+                <dd>{numeric.format(report.volume)}</dd>
+              </div>
+            )}
+          </dl>}
           <p>Прогноз учитывает новых пользователей этого месяца.</p>
         </div>
         {model === 'ads' && (number(values.guestUsers) > 0 || month.guestImpressions.trim()) && <details className="month-overrides">
@@ -218,9 +263,9 @@ function CostPlan({ mode, expenses, totals, update, updateExpense, amount }) {
       )}
       <p className="cost-note">Пустые поля считаются нулём. Итог месяца автоматически берёт расходы из этой сметы.</p>
       {valid ? <dl className="cost-totals">
-        <div><dt>Разово</dt><dd>{money(totals.upfront)}</dd></div>
-        <div><dt>В месяц</dt><dd>{money(totals.monthly)}</dd></div>
-      </dl> : <p className="error">Проверь суммы. Максимум {money(moneyLimit)} разово и столько же в месяц.</p>}
+        <div><dt>Разово</dt><dd className="money-value">{money(totals.upfront)}</dd></div>
+        <div><dt>В месяц</dt><dd className="money-value">{money(totals.monthly)}</dd></div>
+      </dl> : <p className="error">Проверь суммы. Максимум <span className="money-value">{money(moneyLimit)}</span> разово и столько же в месяц.</p>}
     </div>
   );
 }
@@ -269,9 +314,14 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
     <EconomySection index={index} preview={preview} active={active} onSelect={selectSection}>{children}</EconomySection>
   );
   const costSummary = Number.isFinite(costPlan.upfront) && Number.isFinite(costPlan.monthly)
-    ? money(costPlan.upfront) + ' разово · ' + money(costPlan.monthly) + ' в месяц' : 'Проверь суммы';
-  const trafficSummary = traffic ? numeric.format(traffic.users) + ' новых регистраций · ' + money(traffic.budget) + ' на рекламу' : '';
-  const monthSummary = monthReport.profit === null ? '' : monthOutcome(monthReport.profit).label + ' ' + money(Math.abs(monthReport.profit));
+    ? <><span className="money-value">{money(costPlan.upfront)}</span> разово · <span className="money-value">{money(costPlan.monthly)}</span> в месяц</>
+    : 'Проверь суммы';
+  const trafficSummary = traffic && <>
+    {numeric.format(traffic.users)} новых регистраций · <span className="money-value">{money(traffic.budget)}</span> на рекламу
+  </>;
+  const monthSummary = monthReport.profit !== null && <>
+    {monthOutcome(monthReport.profit).label}{' '}<span className="money-value">{money(Math.abs(monthReport.profit))}</span>
+  </>;
 
   return (
     <div className="economy-flow" ref={flow}>
@@ -308,7 +358,7 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
         При таком бюджете ожидается около <strong>{numeric.format(traffic.users)}</strong> новых регистраций
       </p>}
       {target === 'users' && traffic && <p className="budget-estimate">
-        На рекламу понадобится примерно <strong>{money(traffic.budget)}</strong>
+        На рекламу понадобится примерно <strong className="money-value">{money(traffic.budget)}</strong>
       </p>}
       <AcquisitionBenchmarks />
       </>)}
@@ -367,7 +417,7 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
           <h4>Вклад {paid ? 'плательщика' : 'пользователя'} за весь срок (LTV)</h4>
           <p>Выручка с одного {paid ? 'плательщика' : 'пользователя'} за всё время × маржинальность.</p>
         </div>
-        {unit && <strong>{money(unit.ltv)}</strong>}
+        {unit && <strong className="money-value">{money(unit.ltv)}</strong>}
       </aside>
       {model === 'ads' && <>
         <details className="benchmark ad-guests">

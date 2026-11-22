@@ -124,14 +124,14 @@ legend { padding: 0; margin-bottom: 12px; }
 .context { color: var(--green); font-weight: 730; margin-top: -12px; overflow-wrap: anywhere; }
 .intro { color: var(--muted); margin-top: 7px; }
 .input-with-unit { position: relative; }
-.input-with-unit input { padding-right: 34px; }
+.input-with-unit input { padding-right: 34px; font-variant-numeric: tabular-nums; }
 .input-with-unit > span { position: absolute; top: 11px; right: 11px; color: var(--muted); pointer-events: none; }
 .results { background: var(--ink); color: #fff; border-radius: 12px; padding: 17px; min-width: 0; }
-.profit { font-size: clamp(1.7rem, 5vw, 2.6rem); line-height: 1.1; color: var(--lime); overflow-wrap: anywhere; }
+.profit { font-size: clamp(1.7rem, 5vw, 2.6rem); line-height: 1.1; color: var(--lime); }
 .profit-caption { color: #e0e4da; margin-top: 5px; }
 .results dl { margin: 14px 0; font-size: .9rem; }
-.results dl > div { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid #565d50; }
-.results dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.results dl > div { padding: 6px 0; border-bottom: 1px solid #565d50; }
+
 .breakeven { color: var(--lime); font-size: .95rem; }
 footer { padding: 15px 0 24px; color: var(--muted); font-size: .875rem; }
 dialog { width: min(calc(100% - 32px), 430px); padding: 20px; border: 0; border-radius: 16px; color: var(--ink); }
@@ -182,17 +182,33 @@ dialog::backdrop { background: #171d14ac; }
 .month-outcome p { font-weight: 680; }
 .month-outcome strong {
   display: block;
-  font-size: clamp(1.8rem, 6vw, 3rem);
+  font-size: clamp(1.4rem, 6.8vw, 3rem);
   font-weight: 800;
   line-height: 1.06;
   letter-spacing: -.045em;
-  overflow-wrap: anywhere;
-  font-variant-numeric: tabular-nums;
 }
 .month-breakdown { margin: 0; color: var(--ink); }
-.month-breakdown > div { display: flex; justify-content: space-between; gap: 10px; padding-block: 6px; }
+.month-breakdown > div { padding-block: 7px; }
 .month-breakdown > div + div { border-top: 1px solid #22251e24; }
-.month-breakdown dd { margin: 0; font-weight: 700; text-align: right; overflow-wrap: anywhere; }
+.month-breakdown dt small { display: block; color: var(--muted); font-size: .875rem; }
+.month-breakdown dd, .month-counts dd { font-weight: 700; }
+.month-counts { margin: 0; display: grid; gap: 5px; }
+.results dl > div, .month-breakdown > div, .month-counts > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+.results dd, .month-breakdown dd, .month-counts dd {
+  margin: 0;
+  text-align: right;
+}
+.money-value, .results dd, .month-breakdown dd, .month-counts dd {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  font-variant-numeric: tabular-nums;
+}
+.results dt, .month-breakdown dt, .month-counts dt { overflow-wrap: anywhere; }
 @media (max-width: 540px) {
   .month-result { grid-template-columns: 1fr; }
 }
