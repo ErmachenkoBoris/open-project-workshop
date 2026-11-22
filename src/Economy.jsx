@@ -281,9 +281,9 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
       <label className="field">
         <span>От чего считаем?</span>
         <select value={target} onChange={(event) => update('target', event.target.value)}>
-          <option value="budget">Знаю рекламный бюджет</option>
-          <option value="users">Знаю, сколько пользователей хочу привлечь</option>
-          <option value="organic">Хочу привлечь пользователей без платной рекламы</option>
+          <option value="budget">От рекламного бюджета</option>
+          <option value="users">От числа регистраций</option>
+          <option value="organic">Без платной рекламы</option>
         </select>
       </label>
       {target !== 'organic' && <label className="field acquisition-method">
@@ -322,8 +322,8 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
       {model === 'custom' && <label className="field">
         <span>По кому считаем доход?</span>
         <select value={customBasis} onChange={(event) => update('customBasis', event.target.value)}>
-          <option value="users">В среднем на каждого привлечённого пользователя</option>
-          <option value="customers">В среднем на платящего клиента</option>
+          <option value="users">На одного пользователя</option>
+          <option value="customers">На одного плательщика</option>
         </select>
       </label>}
       <div className="columns amount-grid">

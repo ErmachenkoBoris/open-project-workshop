@@ -62,7 +62,15 @@ h1 { font-size: clamp(3.4rem, 10vw, 7.8rem); line-height: .92; letter-spacing: -
   color: var(--ink); border: 1px solid #bfc5b6; border-radius: 9px;
   background: #fff; padding: 10px 11px; width: 100%; min-height: 45px;
 }
-.field textarea { resize: vertical; }
+.field .growing-text {
+  display: block;
+  field-sizing: content;
+  resize: none;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.field .growing-text.two-rows { min-height: 4.2em; }
 .field input::placeholder, .field textarea::placeholder { color: #767c70; }
 .field small { color: var(--muted); font-size: .875rem; }
 .columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }

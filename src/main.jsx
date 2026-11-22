@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
 import { ideas, payments } from './ideas.js';
@@ -70,6 +70,48 @@ function readDraft() {
   } catch {
     return defaults;
   }
+}
+
+function GrowingText({ value, onChange, rows = 1, singleLine = false, ...props }) {
+  const field = useRef(null);
+
+  useLayoutEffect(() => {
+    const input = field.current;
+    if (globalThis.CSS?.supports('field-sizing', 'content')) return;
+
+    function resize() {
+      input.style.height = 'auto';
+      input.style.height = input.scrollHeight + input.offsetHeight - input.clientHeight + 'px';
+    }
+
+    resize();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', resize);
+      return () => window.removeEventListener('resize', resize);
+    }
+
+    let width = input.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (width === input.clientWidth) return;
+      width = input.clientWidth;
+      resize();
+    });
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, [value]);
+
+  function handleKeyDown(event) {
+    if (singleLine && event.key === 'Enter' && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
+
+  return (
+    <textarea {...props} ref={field} rows={rows} className={rows === 1 ? 'growing-text' : 'growing-text two-rows'}
+      value={value} onKeyDown={singleLine ? handleKeyDown : undefined}
+      onChange={(event) => onChange(singleLine ? event.target.value.replace(/[\r\n]+/g, ' ') : event.target.value)} />
+  );
 }
 
 function QRDialog({ dialog }) {
@@ -228,7 +270,7 @@ function App() {
             <h2 tabIndex="-1" ref={stepHeading}>Знакомство и идея</h2>
             <label className="field compact">
               <span>Как тебя зовут?</span>
-              <input value={draft.name} onChange={(event) => update('name', event.target.value)} autoComplete="given-name" placeholder="Например, Саша" maxLength={80} />
+              <GrowingText value={draft.name} onChange={(value) => update('name', value)} singleLine autoComplete="given-name" placeholder="Например, Саша" maxLength={80} />
             </label>
 
             <div className="section">
@@ -240,7 +282,7 @@ function App() {
               {draft.source === 'own' ? (
                 <label className="field">
                   <span>Опиши свою идею в одном предложении</span>
-                  <textarea value={draft.customIdea} onChange={(event) => update('customIdea', event.target.value)} rows={2} maxLength={300} placeholder="Что сделает продукт и какую задачу решит?" />
+                  <GrowingText value={draft.customIdea} onChange={(value) => update('customIdea', value)} rows={2} maxLength={300} placeholder="Что сделает продукт и какую задачу решит?" />
                 </label>
               ) : (
                 <>
@@ -267,11 +309,11 @@ function App() {
               <div className="columns">
                 <label className="field">
                   <span>Целевая аудитория</span>
-                  <input value={draft.audience} onChange={(event) => update('audience', event.target.value)} maxLength={200} placeholder="Кто столкнулся с этой задачей?" />
+                  <GrowingText value={draft.audience} onChange={(value) => update('audience', value)} maxLength={200} placeholder="Кто столкнулся с этой задачей?" />
                 </label>
                 <label className="field">
                   <span>Где найти первых пользователей?</span>
-                  <input value={draft.channel} onChange={(event) => update('channel', event.target.value)} maxLength={240} placeholder="Например, в локальном Telegram-чате" />
+                  <GrowingText value={draft.channel} onChange={(value) => update('channel', value)} maxLength={240} placeholder="Например, в локальном Telegram-чате" />
                 </label>
               </div>
             </div>
@@ -288,7 +330,7 @@ function App() {
               </div>
               {model === 'custom' && <label className="field custom-model">
                 <span>Опиши свою модель дохода</span>
-                <input value={draft.customModel} onChange={(event) => update('customModel', event.target.value)}
+                <GrowingText value={draft.customModel} onChange={(value) => update('customModel', value)}
                   maxLength={160} placeholder="Например, донаты и спонсорские размещения" />
               </label>}
             </fieldset>
