@@ -4,18 +4,29 @@ export function number(value) {
   return Number(normalized);
 }
 
+export const moneyLimit = 100_000_000;
+
+export function moneyInput(value) {
+  const parsed = number(value);
+  return parsed <= moneyLimit ? parsed : NaN;
+}
+
+function optionalMoney(value) {
+  return String(value ?? '').trim() ? moneyInput(value) : 0;
+}
+
 function valid(...values) {
   return values.every((value) => Number.isFinite(value) && value >= 0);
 }
 
 export function estimateAcquisition(values, acquisition, target = 'budget') {
   const fromClicks = target !== 'organic' && acquisition === 'clicks';
-  const cpc = number(values.cpc);
+  const cpc = moneyInput(values.cpc);
   const registrationRate = number(values.registrationRate) / 100;
   if (fromClicks && (!valid(cpc, registrationRate) || registrationRate > 1)) return null;
-  const costPerRegistration = target === 'organic' ? 0 : fromClicks ? cpc / registrationRate : number(values.cpa);
+  const costPerRegistration = target === 'organic' ? 0 : fromClicks ? cpc / registrationRate : moneyInput(values.cpa);
   if (!valid(costPerRegistration) || (target !== 'organic' && costPerRegistration === 0)) return null;
-  const budget = target === 'budget' ? number(values.budget) : number(values.targetUsers) * costPerRegistration;
+  const budget = target === 'budget' ? moneyInput(values.budget) : number(values.targetUsers) * costPerRegistration;
   const users = target === 'budget' ? budget / costPerRegistration : number(values.targetUsers);
   if (!valid(budget, users) || (target !== 'budget' && !Number.isSafeInteger(users))) return null;
   const clicks = fromClicks ? budget / cpc : null;
@@ -42,12 +53,15 @@ export const expenseFields = {
 };
 
 export function estimateExpenses(expenses, mode, upfront, monthly) {
-  const optionalNumber = (value) => String(value ?? '').trim() ? number(value) : 0;
-  if (mode !== 'detailed') {
-    return { upfront: optionalNumber(upfront), monthly: optionalNumber(monthly) };
-  }
-  const total = (fields) => fields.reduce((sum, [name]) => sum + optionalNumber(expenses[name]), 0);
-  return { upfront: total(expenseFields.upfront), monthly: total(expenseFields.monthly) + optionalNumber(expenses.domain) / 12 };
+  if (mode !== 'detailed') return { upfront: optionalMoney(upfront), monthly: optionalMoney(monthly) };
+
+  const total = (fields) => fields.reduce((sum, [name]) => sum + optionalMoney(expenses[name]), 0);
+  const upfrontTotal = total(expenseFields.upfront);
+  const monthlyTotal = total(expenseFields.monthly) + optionalMoney(expenses.domain) / 12;
+  return {
+    upfront: upfrontTotal <= moneyLimit ? upfrontTotal : NaN,
+    monthly: monthlyTotal <= moneyLimit ? monthlyTotal : NaN,
+  };
 }
 
 export function forecast(values, model, acquisition, customBasis, target = 'budget') {
@@ -55,18 +69,18 @@ export function forecast(values, model, acquisition, customBasis, target = 'budg
   const { conversion, margin, price, periods, rate, freeCost, launchCost, impressions, cpm,
     guestViews } = fields;
   const traffic = estimateAcquisition(values, acquisition, target);
-  if (!traffic || !valid(launchCost)) return null;
+  if (!traffic || !valid(launchCost) || launchCost > moneyLimit) return null;
   const { budget, users, costPerRegistration } = traffic;
   const registeredBasis = model === 'ads' || (model === 'custom' && customBasis === 'users');
 
   const payerShare = registeredBasis ? null : conversion / 100;
-  if (!registeredBasis && (!valid(payerShare, freeCost) || payerShare > 1)) return null;
+  if (!registeredBasis && (!valid(payerShare, freeCost) || payerShare > 1 || freeCost > moneyLimit)) return null;
   if (!valid(margin) || margin > 100) return null;
-  if (model !== 'ads' && !valid(price)) return null;
+  if (model !== 'ads' && (!valid(price) || price > moneyLimit)) return null;
   if (['subscription', 'commission', 'ads'].includes(model) && !valid(periods)) return null;
   if (model === 'commission' && (!valid(rate) || rate > 100)) return null;
   const guestCount = model === 'ads' ? number(String(values.guestUsers ?? '').trim() || 0) : 0;
-  if (model === 'ads' && (!valid(impressions, cpm) || !Number.isSafeInteger(guestCount)
+  if (model === 'ads' && (!valid(impressions, cpm) || cpm > moneyLimit || !Number.isSafeInteger(guestCount)
     || guestCount < 0 || (guestCount > 0 && !valid(guestViews)))) return null;
 
   let revenueMultiplier = 1;
@@ -112,8 +126,30 @@ export function forecast(values, model, acquisition, customBasis, target = 'budg
   return results;
 }
 
-export function monthlyResult(values) {
-  const [revenue, variable, ads, fixed] = ['revenue', 'variable', 'ads', 'fixed']
-    .map((field) => number(values[field]));
-  return valid(revenue, variable, ads, fixed) ? revenue - variable - ads - fixed : null;
+export const monthlyVolumeLabels = {
+  sale: 'Продаж за месяц',
+  subscription: 'Оплат подписки за месяц',
+  commission: 'Сделок за месяц',
+  ads: 'Показов рекламы за месяц',
+};
+
+export function estimateMonthlyRevenue(model, values, volume) {
+  const count = number(volume);
+  if (!Number.isSafeInteger(count) || !Number.isFinite(count)) return NaN;
+  if (model === 'ads') return moneyInput(values.cpm) * count / 1000;
+  const price = moneyInput(values.price);
+  if (model !== 'commission') return price * count;
+  const rate = number(values.rate);
+  return rate <= 100 ? price * count * rate / 100 : NaN;
+}
+
+export function monthlyResult(values, costPlan, plannedAds, period, revenue = moneyInput(values.revenue)) {
+  const has = (field) => String(values[field] ?? '').trim() !== '';
+  const variable = optionalMoney(values.variable);
+  const ads = has('ads') ? moneyInput(values.ads) : plannedAds;
+  const fixed = has('fixed') ? moneyInput(values.fixed) : costPlan.monthly;
+  const upfront = period === 'launch' ? costPlan.upfront : 0;
+  const expenses = valid(variable, ads, fixed, upfront) ? variable + ads + fixed + upfront : null;
+  const profit = valid(revenue) && expenses !== null ? Math.round((revenue - expenses) * 100) / 100 : null;
+  return { revenue, variable, ads, fixed, upfront, expenses, profit };
 }

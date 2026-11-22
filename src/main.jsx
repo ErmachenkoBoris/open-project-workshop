@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
 import { ideas, payments } from './ideas.js';
-import { estimateExpenses, forecast, monthlyResult, number } from './economics.js';
+import { estimateAcquisition, estimateExpenses, estimateMonthlyRevenue, forecast, moneyInput, monthlyResult, number } from './economics.js';
 import { Economy } from './Economy.jsx';
 import { money, monthOutcome } from './Format.js';
 import './style.css';
@@ -14,7 +14,7 @@ const defaults = {
   name: '', source: 'bank', ideaId: '', customIdea: '', audience: '', channel: '',
   model: '', customModel: '', customBasis: 'users', acquisition: 'cpa', target: 'budget', expenseMode: 'total', expenses: {}, step: 1,
   numbers: { shared: { budget: '', targetUsers: '', monthlyPlan: '', cpa: '', cpc: '', registrationRate: '', launchCost: '0' } },
-  month: { revenue: '', variable: '', ads: '', fixed: '' },
+  month: { revenue: '', variable: '', ads: '', fixed: '', period: 'launch', revenueMode: 'manual' },
 };
 const modelDefaults = {
   price: '', rate: '', conversion: '', periods: '', margin: '100', freeCost: '0',
@@ -101,8 +101,13 @@ function App() {
   const values = { ...modelDefaults, ...draft.numbers[model], ...draft.numbers.shared };
   const costPlan = estimateExpenses(expenses, expenseMode, values.launchCost, values.monthlyPlan);
   const result = model ? forecast({ ...values, launchCost: costPlan.upfront }, model, acquisition, customBasis, target) : null;
-  const monthly = monthlyResult(month);
-  const monthStatus = monthly === null ? null : monthOutcome(monthly);
+  const traffic = estimateAcquisition(values, acquisition, target);
+  const plannedAds = target === 'budget' ? moneyInput(values.budget)
+    : target === 'organic' ? 0 : traffic?.budget ?? NaN;
+  const modeledRevenue = month.revenueMode === 'model' && model !== 'custom';
+  const monthRevenue = modeledRevenue ? estimateMonthlyRevenue(model, values, month['volume-' + model]) : moneyInput(month.revenue);
+  const monthReport = monthlyResult(month, costPlan, plannedAds, month.period, monthRevenue);
+  const monthStatus = monthReport.profit === null ? null : monthOutcome(monthReport.profit);
   const possibleIdeas = filter === 'Все' ? ideas : ideas.filter(({ format }) => format === filter);
   const shownIdeas = expanded || filter !== 'Все' ? possibleIdeas : possibleIdeas.slice(0, 4);
 
@@ -195,10 +200,11 @@ function App() {
             </div>
             {title?.trim() && <p><strong>{title.trim()}</strong>{modelLabel && ' · ' + modelLabel}</p>}
             {draft.audience.trim() && <p>Аудитория — {draft.audience.trim()}</p>}
-            {complete && result && <p>Вклад когорты после расходов — <strong>{money(result.profit)}</strong></p>}
+            {complete && result && !monthStatus && <p>Вклад за весь срок <strong>{money(result.profit)}</strong></p>}
             {complete && monthStatus && (
               <p className="participant-month" data-tone={monthStatus.tone}>
-                {monthStatus.label} <strong>{money(Math.abs(monthly))}</strong>
+                {month.period === 'launch' ? 'Месяц запуска' : 'Обычный месяц'} · {monthStatus.tone === 'even' ? 'в ноль' : monthStatus.label.split(' за месяц')[0].toLowerCase()}{' '}
+                <strong>{money(Math.abs(monthReport.profit))}</strong>
               </p>
             )}
           </section>
@@ -290,17 +296,11 @@ function App() {
           <section className="panel">
             <h2 tabIndex="-1" ref={stepHeading}>Экономика проекта</h2>
             <p className="context">{title} · {modelLabel}</p>
-            <p className="intro">Посчитай, сколько пользователей нужно и как на них заработать.</p>
-            <label className="field compact model-select">
-              <span>Модель дохода</span>
-              <select value={model} onChange={(event) => update('model', event.target.value)}>
-                {Object.entries(payments).map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
-              </select>
-            </label>
+            <p className="intro">Начни со сметы, затем оцени привлечение и доход. Итог месяца соберёт расходы из предыдущих разделов.</p>
             <Economy model={model} acquisition={acquisition} target={target} customBasis={customBasis} values={values}
               expenseMode={expenseMode} expenses={expenses} costPlan={costPlan} updateExpense={updateExpense}
               update={update} updateAmount={updateAmount} result={result} month={month} updateMonth={updateMonth}
-              monthly={monthly} />
+              monthReport={monthReport} modeledRevenue={modeledRevenue} traffic={traffic} plannedAds={plannedAds} />
             <aside className="pair">
               <h3>Сравните сценарии в паре</h3>
               <p>Поменяйте одно число. Сколько можно платить за нового пользователя? Какой бюджет готовы выделить на тест и что станет поводом его остановить?</p>

@@ -115,8 +115,6 @@ legend { padding: 0; margin-bottom: 12px; }
 
 .context { color: var(--green); font-weight: 730; margin-top: -12px; overflow-wrap: anywhere; }
 .intro { color: var(--muted); margin-top: 7px; }
-.calc { display: grid; grid-template-columns: 1.12fr 1fr; gap: 20px; margin-top: 20px; align-items: start; }
-.calc h3 { margin-bottom: 12px; }
 .input-with-unit { position: relative; }
 .input-with-unit input { padding-right: 34px; }
 .input-with-unit > span { position: absolute; top: 11px; right: 11px; color: var(--muted); pointer-events: none; }
@@ -135,9 +133,6 @@ dialog::backdrop { background: #171d14ac; }
 .qr-image { display: block; width: min(100%, 320px); height: auto; margin: 4px auto; }
 .site-link { display: block; margin-bottom: 12px; overflow-wrap: anywhere; }
 
-@media (max-width: 740px) {
-  .calc { grid-template-columns: 1fr; }
-}
 @media (max-width: 470px) {
   .wrap { width: calc(100% - 24px); }
   .steps button { padding: 9px 8px; font-size: .875rem; gap: 5px; }
@@ -156,12 +151,8 @@ dialog::backdrop { background: #171d14ac; }
 .participant-heading h2 { font-size: 1.2rem; }
 .participant-heading span { font-size: .875rem; color: var(--muted); }
 .participant p { margin-top: 4px; }
-.custom-model, .model-select, .calc select { margin-top: 12px; }
-.calc .amount-grid { margin-top: 12px; }
-.month { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 22px; }
-.month details { margin-top: 8px; }
-.month summary { cursor: pointer; width: fit-content; color: var(--green); }
-.month-intro, .month .columns { margin-top: 12px; }
+.custom-model { margin-top: 12px; }
+.month-intro { margin-top: 12px; }
 .month-intro { color: var(--muted); font-size: .95rem; }
 .month-result {
   --month-ink: #3e463b;
@@ -200,8 +191,7 @@ dialog::backdrop { background: #171d14ac; }
 
 .benchmark {
   margin-top: 12px;
-  border: 1px solid #d6ded0;
-  border-radius: 9px;
+  border-left: 3px solid #b9c9af;
   color: var(--muted);
   font-size: .9rem;
 }
@@ -209,7 +199,7 @@ dialog::backdrop { background: #171d14ac; }
   cursor: pointer;
   padding: 10px 12px;
   color: var(--green);
-  font-weight: 680;
+  font-weight: 650;
 }
 .benchmark summary:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; border-radius: 9px; }
 .benchmark[open] { background: #f8faf5; }
@@ -220,9 +210,7 @@ dialog::backdrop { background: #171d14ac; }
 .benchmark-body h4 { margin: 3px 0 -4px; color: var(--ink); font-size: 1rem; font-weight: 800; }
 .acquisition-method { margin-top: 12px; }
 .budget-estimate { margin-top: 10px; color: var(--green); }
-.project-costs { margin-top: 15px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
-.project-costs summary { cursor: pointer; color: var(--green); font-weight: 730; }
-.project-costs > .field, .cost-groups, .cost-note, .apply-cost-plan { margin-top: 12px; }
+.cost-groups, .cost-note { margin-top: 12px; }
 .cost-groups { display: grid; gap: 14px; }
 .cost-groups legend { margin-bottom: 0; }
 .cost-note { font-size: .875rem; color: var(--muted); }
@@ -231,3 +219,55 @@ dialog::backdrop { background: #171d14ac; }
 .cost-totals dd { margin: 0; font-weight: 720; }
 .input-with-unit:has([name="expense-domain"]) input { padding-right: 58px; }
 .input-with-unit:has([name="targetUsers"], [name="guestUsers"]) input { padding-right: 44px; }
+
+.economy-flow { display: grid; gap: 10px; margin-top: 18px; }
+.economy-section {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+}
+.economy-section[data-open="true"] { border-color: #a4b498; }
+.economy-section-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 13px clamp(12px, 3vw, 18px);
+  border: 0;
+  border-radius: 12px;
+  background: #f8f9f5;
+  text-align: left;
+}
+.economy-section[data-open="true"] .economy-section-toggle { border-radius: 12px 12px 0 0; background: var(--pale); }
+.economy-section-toggle::after { content: '+'; margin-left: auto; color: var(--green); font-size: 1.25rem; }
+.economy-section-toggle[aria-expanded="true"]::after { content: '−'; }
+.economy-index {
+  display: grid;
+  place-items: center;
+  flex: 0 0 1.8rem;
+  height: 1.8rem;
+  border-radius: 7px;
+  background: #e3eadc;
+  color: #34472d;
+  font-size: .93rem;
+  font-weight: 730;
+}
+.economy-step-text { display: grid; gap: 4px; min-width: 0; }
+.economy-step-text small { color: var(--muted); font-size: .83rem; font-weight: 500; letter-spacing: 0; overflow-wrap: anywhere; }
+.economy-section-body { padding: clamp(12px, 3vw, 19px); }
+.economy-section-body > .columns, .project-costs > .columns, .month-overrides > .columns { margin-top: 13px; }
+.economy-next { margin-top: 16px; }
+.field-error { color: #853b24 !important; font-weight: 680; }
+.field input[aria-invalid="true"] { border-color: #a84b2e; }
+.month-switch { margin-bottom: 0; }
+.month-revenue-mode { margin-top: 13px; }
+.month-overrides { margin-top: 14px; }
+.month-overrides summary, .lifetime-details summary { color: var(--green); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.lifetime-details { margin-top: 10px; color: var(--muted); }
+.lifetime-details > p, .lifetime-result { margin-top: 10px; }
+.lifetime-result h4 { margin: 0 0 8px; font-size: 1.08rem; }
+@media (max-width: 470px) {
+  .economy-section-body .amount-grid { grid-template-columns: minmax(0, 1fr); }
+  .economy-section-body .amount-grid .field { grid-template-rows: auto; }
+  .economy-next { width: 100%; }
+}
