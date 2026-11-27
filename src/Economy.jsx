@@ -56,11 +56,44 @@ function Amount({ name, label, unit, hint, value, onChange, example }) {
   );
 }
 
+function AcquisitionLimits({ result, organic }) {
+  if (!result.scalable) return <p>Чтобы оценить предел цены регистрации, укажи число регистраций и соотношение гостей и зарегистрированных пользователей.</p>;
+
+  let launchNote;
+  if (result.launchCost === 0) {
+    launchNote = 'В смете запуск стоит 0 ₽. Покрывать разовые расходы не требуется.';
+  } else if (result.incrementalContribution <= 0) {
+    launchNote = 'При такой цене привлечения с каждой регистрации на запуск остаётся 0 ₽ или меньше. Увеличение числа регистраций не покроет запуск.';
+  } else if (organic) {
+    launchNote = <>Чтобы покрыть запуск, нужно около {numeric.format(Math.ceil(result.breakEvenUsers))} регистраций при тех же вводных.</>;
+  } else {
+    launchNote = <>Чтобы вернуть {money(result.launchCost)} затрат на запуск, нужен общий рекламный бюджет около <strong>{money(result.breakEvenBudget)}</strong>. Твой бюджет {money(result.budget)} {result.budget >= result.breakEvenBudget ? 'уже покрывает эту сумму' : 'ниже этого порога'}. Оценка верна, пока цена регистрации и средний вклад с неё остаются прежними.</>;
+  }
+
+  return <div className="acquisition-limits">
+    {!organic && <section>
+      <h5>Сколько можно платить за одну регистрацию?</h5>
+      {result.maxCpa === null
+        ? <p>Даже при бесплатном привлечении переменные расходы превышают доход от этих пользователей.</p>
+        : <p>Предел — <strong>{money(result.maxCpa)}</strong>. Столько в среднем приносит одна регистрация после переменных расходов. При такой цене весь вклад уйдёт на рекламу.</p>}
+      <p>Цена в твоём расчёте — {money(result.costPerRegistration)}. {result.incrementalContribution >= 0
+        ? <>После рекламы остаётся {money(result.incrementalContribution)} с регистрации.</>
+        : <>Каждая регистрация увеличивает убыток на {money(-result.incrementalContribution)}.</>}</p>
+    </section>}
+    <section>
+      <h5>{organic ? 'Сколько пользователей нужно, чтобы окупить запуск?' : 'Какой бюджет на рекламу покроет ещё и запуск?'}</h5>
+      <p>{launchNote}</p>
+    </section>
+  </div>;
+}
+
 function Result({ result, model, target }) {
   const organic = target === 'organic';
+  const sale = model === 'sale';
+  const heading = sale ? 'Результат разовых продаж' : 'Вклад привлечённых пользователей за весь срок';
   if (!result) return (
     <div className="results lifetime-result">
-      <h4>Прогноз за всё время использования</h4>
+      <h4>{heading}</h4>
       <p>Заполни поля, чтобы увидеть прогноз. Для платной рекламы цена и доля регистраций должны быть больше нуля.</p>
     </div>
   );
@@ -86,11 +119,10 @@ function Result({ result, model, target }) {
     ...(result.customers === null ? [] : [['Платящие клиенты', numeric.format(result.customers)]]),
     ['Стоимость регистрации (CPA)', money(result.costPerRegistration)],
     ...(result.registeredBasis ? [] : [['Стоимость привлечения плательщика (CAC)', result.cac === null ? '—' : money(result.cac)]]),
-    [result.registeredBasis ? 'Вклад пользователя за весь срок (LTV)' : 'Вклад плательщика за весь срок (LTV)', money(result.ltv)],
+    [sale ? 'Вклад одной покупки после переменных расходов' : result.registeredBasis ? 'Вклад пользователя за весь срок (LTV)' : 'Вклад плательщика за весь срок (LTV)', money(result.ltv)],
     ...(result.ltvToCac === null ? [] : [['LTV / CAC', numeric.format(result.ltvToCac) + '×']]),
-    ['Выручка за всё время использования', money(result.revenue)],
+    [sale ? 'Выручка от разовых продаж' : 'Выручка за всё время использования', money(result.revenue)],
     ['Вклад после рекламы, до расходов запуска', money(result.afterAds)],
-    ...(result.maxCpa === null ? [] : [['Предельный CPA до расходов запуска', money(result.maxCpa)]]),
     ...(result.minPrice === null ? [] : [[costLabel + ' до расходов запуска', money(result.minPrice)]]),
     ...(result.payback === null ? [] : [[
       result.paybackWithinLifetime ? 'Окупаемость привлечения' : 'Окупаемость привлечения (дольше срока жизни)',
@@ -99,20 +131,15 @@ function Result({ result, model, target }) {
   ];
   return (
     <div className="results lifetime-result" aria-live="polite" aria-atomic="true">
-      <h4>Вклад привлечённых пользователей за весь срок</h4>
+      <h4>{heading}</h4>
       <strong className="profit money-value" data-tone={monthOutcome(result.profit).tone}>{money(result.profit)}</strong>
-      <p className="profit-caption">Реклама и разовые расходы на запуск уже вычтены. Регулярные расходы проекта сюда не входят.</p>
-      {model === 'sale' && <p className="profit-caption">Каждый покупатель платит один раз. Расчёт учитывает только эту группу покупателей. Продажи новым клиентам в следующем месяце сюда не входят.</p>}
-      <dl>{metrics.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-      <p className="breakeven">{!result.scalable
-        ? 'Для оценки порога по регистрациям укажи хотя бы одного зарегистрированного пользователя.'
-        : result.breakEvenUsers === null
-          ? 'При этих вводных рост числа пользователей не принесёт прибыль.'
-          : result.breakEvenUsers === 0
-            ? 'Вклад с пользователя покрывает его привлечение. Разовые расходы равны нулю.'
-            : organic
-              ? 'Для выхода в ноль нужно привлечь ' + numeric.format(Math.ceil(result.breakEvenUsers)) + ' новых пользователей при тех же вводных.'
-              : <>Бюджет для выхода в ноль — около <span className="money-value">{money(result.breakEvenBudget)}</span> при той же стоимости и структуре аудитории.</>}</p>
+      <p className="profit-caption">{sale && <>На покупателя приходится одна покупка. </>}Из {money(result.contributionBeforeAds)} после переменных расходов вычитаем {money(result.budget)} на рекламу и {money(result.launchCost)} на запуск. Регулярные расходы проекта учтены отдельно в итоге месяца.</p>
+      <AcquisitionLimits result={result} organic={organic} />
+      <details className="metric-details">
+        <summary>Посмотреть остальные показатели</summary>
+        {!organic && result.users > 0 && result.maxCpa !== null && <p>Предел цены регистрации: {money(result.contributionBeforeAds)} после переменных расходов ÷ {numeric.format(result.users)} регистраций ≈ {money(result.maxCpa)}.</p>}
+        <dl>{metrics.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+      </details>
     </div>
   );
 }
@@ -415,8 +442,8 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
       </details>}
       <aside className="ltv-preview" aria-live="polite">
         <div>
-          <h4>Вклад {paid ? 'плательщика' : 'пользователя'} за весь срок (LTV)</h4>
-          <p>Выручка с одного {paid ? 'плательщика' : 'пользователя'} за всё время × маржинальность.</p>
+          <h4>{model === 'sale' ? 'Вклад одной покупки' : 'Вклад ' + (paid ? 'плательщика' : 'пользователя') + ' за весь срок (LTV)'}</h4>
+          <p>{model === 'sale' ? 'Средний чек × маржинальность. Столько остаётся с продажи после переменных расходов.' : 'Выручка с одного ' + (paid ? 'плательщика' : 'пользователя') + ' за всё время × маржинальность.'}</p>
         </div>
         {unit && <strong className="money-value">{money(unit.ltv)}</strong>}
       </aside>
@@ -437,8 +464,7 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
       {stage(3, monthSummary, <MonthForm month={month} model={model} updateMonth={updateMonth}
         report={monthReport} traffic={traffic} values={values} />)}
       <details className="lifetime-details">
-        <summary>Прогноз за весь срок использования · LTV и окупаемость</summary>
-        <p>Здесь считаем вклад новых пользователей за всё время, которое они пользуются продуктом. Для итога одного месяца используй раздел выше.</p>
+        <summary>{model === 'sale' ? 'Окупится ли запуск при разовых продажах?' : 'Прогноз за весь срок использования · LTV и окупаемость'}</summary>
         <Result result={result} model={model} target={target} />
       </details>
     </div>

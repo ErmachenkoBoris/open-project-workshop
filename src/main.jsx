@@ -250,7 +250,7 @@ function App() {
             </div>
             {title?.trim() && <p><strong>{title.trim()}</strong>{modelLabel && ' · ' + modelLabel}</p>}
             {draft.audience.trim() && <p>Аудитория — {draft.audience.trim()}</p>}
-            {complete && result && !monthStatus && <p>Вклад за весь срок <strong className="money-value">{money(result.profit)}</strong></p>}
+            {complete && result && !monthStatus && <p>{model === 'sale' ? 'Результат разовых продаж' : 'Вклад за весь срок'} <strong className="money-value">{money(result.profit)}</strong></p>}
             {complete && monthStatus && (
               <p className="participant-month" data-tone={monthStatus.tone}>
                 {month.period === 'launch' ? 'Месяц запуска' : 'Обычный месяц'} · {monthStatus.tone === 'even' ? 'в ноль' : monthStatus.label.split(' за месяц')[0].toLowerCase()}{' '}

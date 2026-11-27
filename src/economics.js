@@ -114,7 +114,7 @@ export function forecast(values, model, acquisition, customBasis, target = 'budg
   const incrementalContribution = contributionPerRegistration - costPerRegistration;
   const breakEvenUsers = scalable && incrementalContribution > 0 ? launchCost / incrementalContribution : null;
   const breakEvenBudget = breakEvenUsers === null ? null : breakEvenUsers * costPerRegistration;
-  const maxCpa = scalable ? Math.max(0, contributionPerRegistration) : null;
+  const maxCpa = scalable && contributionPerRegistration >= 0 ? contributionPerRegistration : null;
   const monetizedShare = registeredBasis ? 1 : payerShare;
   const costOfNonPayers = registeredBasis ? 0 : (1 - payerShare) * freeCost;
   const guestMultiplier = users > 0 ? guestImpressions / users / 1000 : 0;
@@ -128,6 +128,7 @@ export function forecast(values, model, acquisition, customBasis, target = 'budg
     ? (model === 'ads' ? costPerRegistration : cac) / monthlyContribution : null;
   const results = {
     ...traffic, customers, ltv, registeredBasis, cac, revenue, maxCpa, minPrice, ltvToCac, afterAds,
+    launchCost, incrementalContribution, contributionBeforeAds: users * registrationContribution + guestContribution,
     profit: afterAds - launchCost, breakEvenBudget, breakEvenUsers, payback,
     guestCount, guestRevenue, scalable,
     adImpressions: model === 'ads' ? users * impressions * periods + guestImpressions : null,

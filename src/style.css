@@ -134,7 +134,11 @@ legend { padding: 0; margin-bottom: 12px; }
 .results dl { margin: 14px 0; font-size: .9rem; }
 .results dl > div { padding: 6px 0; border-bottom: 1px solid #565d50; }
 
-.breakeven { color: var(--lime); font-size: .95rem; }
+.acquisition-limits section { margin-top: 16px; }
+.acquisition-limits h5 { font-size: 1rem; margin: 0 0 4px; }
+.acquisition-limits p { color: #e0e4da; margin: 4px 0; }
+.metric-details { margin-top: 16px; }
+.lifetime-details .metric-details summary { color: #e0e4da; }
 footer { padding: 15px 0 24px; color: var(--muted); font-size: .875rem; }
 dialog { width: min(calc(100% - 32px), 430px); padding: 20px; border: 0; border-radius: 16px; color: var(--ink); }
 dialog::backdrop { background: #171d14ac; }
