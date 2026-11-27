@@ -99,9 +99,10 @@ function Result({ result, model, target }) {
   ];
   return (
     <div className="results lifetime-result" aria-live="polite" aria-atomic="true">
-      <h4>Прогноз за всё время использования</h4>
-      <strong className="profit money-value">{money(result.profit)}</strong>
-      <p className="profit-caption">Вклад за срок жизни после рекламы и расходов запуска</p>
+      <h4>Вклад привлечённых пользователей за весь срок</h4>
+      <strong className="profit money-value" data-tone={monthOutcome(result.profit).tone}>{money(result.profit)}</strong>
+      <p className="profit-caption">Реклама и разовые расходы на запуск уже вычтены. Регулярные расходы проекта сюда не входят.</p>
+      {model === 'sale' && <p className="profit-caption">Каждый покупатель платит один раз. Расчёт учитывает только эту группу покупателей. Продажи новым клиентам в следующем месяце сюда не входят.</p>}
       <dl>{metrics.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
       <p className="breakeven">{!result.scalable
         ? 'Для оценки порога по регистрациям укажи хотя бы одного зарегистрированного пользователя.'
@@ -320,7 +321,7 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
     {numeric.format(traffic.users)} новых регистраций · <span className="money-value">{money(traffic.budget)}</span> на рекламу
   </>;
   const monthSummary = monthReport.profit !== null && <>
-    {monthOutcome(monthReport.profit).label}{' '}<span className="money-value">{money(Math.abs(monthReport.profit))}</span>
+    {monthOutcome(monthReport.profit).label}{' '}<span className="money-value" data-tone={monthOutcome(monthReport.profit).tone}>{money(Math.abs(monthReport.profit))}</span>
   </>;
 
   return (

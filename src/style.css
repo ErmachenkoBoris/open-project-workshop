@@ -127,7 +127,9 @@ legend { padding: 0; margin-bottom: 12px; }
 .input-with-unit input { padding-right: 34px; font-variant-numeric: tabular-nums; }
 .input-with-unit > span { position: absolute; top: 11px; right: 11px; color: var(--muted); pointer-events: none; }
 .results { background: var(--ink); color: #fff; border-radius: 12px; padding: 17px; min-width: 0; }
-.profit { font-size: clamp(1.7rem, 5vw, 2.6rem); line-height: 1.1; color: var(--lime); }
+.profit { font-size: clamp(1.7rem, 5vw, 2.6rem); line-height: 1.1; }
+.profit[data-tone="loss"] { color: #ff9494; }
+.profit[data-tone="gain"] { color: var(--lime); }
 .profit-caption { color: #e0e4da; margin-top: 5px; }
 .results dl { margin: 14px 0; font-size: .9rem; }
 .results dl > div { padding: 6px 0; border-bottom: 1px solid #565d50; }
@@ -175,7 +177,8 @@ dialog::backdrop { background: #171d14ac; }
   align-items: center;
   gap: 14px clamp(12px, 3vw, 24px);
 }
-[data-tone="loss"] { --month-ink: #853b24; --month-bg: #fcf1e9; }
+[data-tone="loss"] { --month-ink: #a0262e; --month-bg: #fff0f0; }
+.economy-step-text [data-tone="loss"] { color: var(--month-ink); }
 [data-tone="gain"] { --month-ink: #2b502a; --month-bg: #ecf5e8; }
 .participant-month { color: var(--month-ink, var(--ink)); }
 .participant-month strong { margin-left: .3em; }
