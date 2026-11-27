@@ -86,13 +86,23 @@ export function lifetimeEconomics(values, model) {
   return valid(lifetimeRevenue, ltv) ? { margin, periods, price, impressions, cpm, revenueMultiplier, lifetimeRevenue, ltv } : null;
 }
 
+export function defaultForecastMonths(values, model) {
+  const lifetime = model === 'subscription' || model === 'ads' ? number(values.periods) : 0;
+  return lifetime > 0 ? lifetime : 1;
+}
+
 export function forecast(values, model, acquisition, customBasis, target = 'budget') {
   const launchCost = moneyInput(values.launchCost);
+  const monthlyCost = optionalMoney(values.monthlyPlan);
+  const months = String(values.forecastMonths ?? '').trim()
+    ? number(values.forecastMonths) : defaultForecastMonths(values, model);
+  const recurringCost = cents(monthlyCost * months) / 100;
+  const fixedCosts = launchCost + recurringCost;
   const traffic = estimateAcquisition(values, acquisition, target);
   const unit = lifetimeEconomics(values, model);
-  if (!traffic || !unit || !valid(launchCost)) return null;
+  if (!traffic || !unit || !valid(fixedCosts) || !(months > 0)) return null;
   const { budget, users, costPerRegistration } = traffic;
-  const { margin, periods, price, impressions, cpm, revenueMultiplier, lifetimeRevenue, ltv } = unit;
+  const { margin, periods, price, impressions, cpm, revenueMultiplier, ltv } = unit;
   const registeredBasis = model === 'ads' || (model === 'custom' && customBasis === 'users');
   const payerShare = registeredBasis ? null : number(values.conversion) / 100;
   const freeCost = moneyInput(values.freeCost);
@@ -101,24 +111,29 @@ export function forecast(values, model, acquisition, customBasis, target = 'budg
   const guestViews = number(values.guestViews);
   if (!Number.isSafeInteger(guestCount) || (guestCount > 0 && !valid(guestViews))) return null;
 
-  const registrationContribution = registeredBasis ? ltv : payerShare * ltv - (1 - payerShare) * freeCost;
+  const timedModel = model === 'subscription' || model === 'ads';
+  const activeMonths = timedModel ? Math.min(months, periods) : null;
+  const periodMultiplier = timedModel && periods > 0 ? revenueMultiplier * (activeMonths / periods) : revenueMultiplier;
+  const periodRevenue = (model === 'ads' ? cpm : price) * periodMultiplier;
+  const periodContribution = periodRevenue * margin / 100;
+  const registrationContribution = registeredBasis ? periodContribution : payerShare * periodContribution - (1 - payerShare) * freeCost;
   const customers = registeredBasis ? null : users * payerShare;
   const cac = payerShare > 0 ? costPerRegistration / payerShare : null;
   const guestImpressions = guestCount > 0 ? guestCount * guestViews : 0;
   const guestRevenue = guestCount > 0 ? guestImpressions / 1000 * cpm : 0;
   const guestContribution = guestCount > 0 ? guestRevenue * margin / 100 : 0;
-  const revenue = (registeredBasis ? users : customers) * lifetimeRevenue + guestRevenue;
+  const revenue = (registeredBasis ? users : customers) * periodRevenue + guestRevenue;
   const afterAds = users * registrationContribution + guestContribution - budget;
   const scalable = users > 0 || guestCount === 0;
   const contributionPerRegistration = registrationContribution + (users > 0 ? guestContribution / users : 0);
   const incrementalContribution = contributionPerRegistration - costPerRegistration;
-  const breakEvenUsers = scalable && incrementalContribution > 0 ? launchCost / incrementalContribution : null;
+  const breakEvenUsers = scalable && incrementalContribution > 0 ? fixedCosts / incrementalContribution : null;
   const breakEvenBudget = breakEvenUsers === null ? null : breakEvenUsers * costPerRegistration;
   const maxCpa = scalable && contributionPerRegistration >= 0 ? contributionPerRegistration : null;
   const monetizedShare = registeredBasis ? 1 : payerShare;
   const costOfNonPayers = registeredBasis ? 0 : (1 - payerShare) * freeCost;
   const guestMultiplier = users > 0 ? guestImpressions / users / 1000 : 0;
-  const priceContribution = monetizedShare * margin / 100 * (revenueMultiplier + guestMultiplier);
+  const priceContribution = monetizedShare * margin / 100 * (periodMultiplier + guestMultiplier);
   const minPrice = scalable && priceContribution > 0
     ? (costPerRegistration + costOfNonPayers) / priceContribution : null;
   const ltvToCac = cac > 0 ? ltv / cac : null;
@@ -129,9 +144,9 @@ export function forecast(values, model, acquisition, customBasis, target = 'budg
   const results = {
     ...traffic, customers, ltv, registeredBasis, cac, revenue, maxCpa, minPrice, ltvToCac, afterAds,
     launchCost, incrementalContribution, contributionBeforeAds: users * registrationContribution + guestContribution,
-    profit: afterAds - launchCost, breakEvenBudget, breakEvenUsers, payback,
+    profit: afterAds - fixedCosts, months, monthlyCost, recurringCost, fixedCosts, breakEvenBudget, breakEvenUsers, payback,
     guestCount, guestRevenue, scalable,
-    adImpressions: model === 'ads' ? users * impressions * periods + guestImpressions : null,
+    adImpressions: model === 'ads' ? users * impressions * activeMonths + guestImpressions : null,
     adRevenuePerUserMonth: model === 'ads' ? impressions / 1000 * cpm : null,
     paybackWithinLifetime: payback !== null && payback <= periods,
   };

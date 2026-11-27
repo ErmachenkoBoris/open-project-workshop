@@ -4,7 +4,7 @@ import QRCode from 'qrcode';
 import { ideas, payments } from './ideas.js';
 import { estimateAcquisition, estimateExpenses, forecast, monthForecast, number } from './economics.js';
 import { Economy } from './Economy.jsx';
-import { money, monthOutcome } from './Format.js';
+import { money, monthOutcome, numeric } from './Format.js';
 import './style.css';
 
 const storageKey = 'open-project-workshop:v1';
@@ -18,7 +18,7 @@ const defaults = {
   month: { revenue: '', variable: '', ads: '', fixed: '', period: 'launch', revenueSource: 'forecast', guestImpressions: '' },
 };
 const modelDefaults = {
-  price: '', rate: '', conversion: '', periods: '', margin: '100', freeCost: '0',
+  price: '', rate: '', conversion: '', periods: '', forecastMonths: '', margin: '100', freeCost: '0',
   impressions: '', cpm: '', guestUsers: '', guestViews: '', firstMonthShare: '',
 };
 
@@ -154,7 +154,7 @@ function App() {
   const modelLabel = model === 'custom' ? draft.customModel.trim() || payments.custom.label : payments[model]?.label ?? '';
   const values = { ...modelDefaults, ...draft.numbers[model], ...draft.numbers.shared };
   const costPlan = estimateExpenses(expenses, expenseMode, values.launchCost, values.monthlyPlan);
-  const result = model ? forecast({ ...values, launchCost: costPlan.upfront }, model, acquisition, customBasis, target) : null;
+  const result = model ? forecast({ ...values, launchCost: costPlan.upfront, monthlyPlan: costPlan.monthly }, model, acquisition, customBasis, target) : null;
   const traffic = estimateAcquisition(values, acquisition, target);
   const monthReport = monthForecast(values, model, customBasis, traffic, target, costPlan, month);
   const monthStatus = monthReport.profit === null ? null : monthOutcome(monthReport.profit);
@@ -250,7 +250,7 @@ function App() {
             </div>
             {title?.trim() && <p><strong>{title.trim()}</strong>{modelLabel && ' · ' + modelLabel}</p>}
             {draft.audience.trim() && <p>Аудитория — {draft.audience.trim()}</p>}
-            {complete && result && !monthStatus && <p>{model === 'sale' ? 'Результат разовых продаж' : 'Вклад за весь срок'} <strong className="money-value">{money(result.profit)}</strong></p>}
+            {complete && result && !monthStatus && <p>Результат за {numeric.format(result.months)} мес. <strong className="money-value">{money(result.profit)}</strong></p>}
             {complete && monthStatus && (
               <p className="participant-month" data-tone={monthStatus.tone}>
                 {month.period === 'launch' ? 'Месяц запуска' : 'Обычный месяц'} · {monthStatus.tone === 'even' ? 'в ноль' : monthStatus.label.split(' за месяц')[0].toLowerCase()}{' '}

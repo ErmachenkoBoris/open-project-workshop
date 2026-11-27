@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { payments } from './ideas.js';
 import { groupMoneyInput, money, monthOutcome, numeric } from './Format.js';
-import { expenseFields, lifetimeEconomics, moneyLimit, monthlyVolumeLabels, number } from './economics.js';
+import { defaultForecastMonths, expenseFields, lifetimeEconomics, moneyLimit, monthlyVolumeLabels, number } from './economics.js';
 import { AcquisitionBenchmarks, MonetizationBenchmarks } from './AdBenchmarks.jsx';
 
 function Amount({ name, label, unit, hint, value, onChange, example }) {
@@ -60,14 +60,14 @@ function AcquisitionLimits({ result, organic }) {
   if (!result.scalable) return <p>Чтобы оценить предел цены регистрации, укажи число регистраций и соотношение гостей и зарегистрированных пользователей.</p>;
 
   let launchNote;
-  if (result.launchCost === 0) {
-    launchNote = 'В смете запуск стоит 0 ₽. Покрывать разовые расходы не требуется.';
+  if (result.fixedCosts === 0) {
+    launchNote = 'Запуск и содержание проекта за выбранный период стоят 0 ₽.';
   } else if (result.incrementalContribution <= 0) {
-    launchNote = 'При такой цене привлечения с каждой регистрации на запуск остаётся 0 ₽ или меньше. Увеличение числа регистраций не покроет запуск.';
+    launchNote = 'При такой цене привлечения с каждой регистрации остаётся 0 ₽ или меньше. Увеличение числа регистраций не покроет запуск и содержание проекта.';
   } else if (organic) {
-    launchNote = <>Чтобы покрыть запуск, нужно около {numeric.format(Math.ceil(result.breakEvenUsers))} регистраций при тех же вводных.</>;
+    launchNote = <>Чтобы покрыть запуск и содержание проекта, нужно около {numeric.format(Math.ceil(result.breakEvenUsers))} регистраций при тех же вводных.</>;
   } else {
-    launchNote = <>Чтобы вернуть {money(result.launchCost)} затрат на запуск, нужен общий рекламный бюджет около <strong>{money(result.breakEvenBudget)}</strong>. Твой бюджет {money(result.budget)} {result.budget >= result.breakEvenBudget ? 'уже покрывает эту сумму' : 'ниже этого порога'}. Оценка верна, пока цена регистрации и средний вклад с неё остаются прежними.</>;
+    launchNote = <>Чтобы покрыть {money(result.fixedCosts)} на запуск и содержание проекта за {numeric.format(result.months)} мес., нужен общий рекламный бюджет около <strong>{money(result.breakEvenBudget)}</strong>. Твой бюджет {money(result.budget)} {result.budget >= result.breakEvenBudget ? 'уже покрывает эту сумму' : 'ниже этого порога'}. Оценка верна, пока цена регистрации и средний вклад с неё остаются прежними.</>;
   }
 
   return <div className="acquisition-limits">
@@ -81,7 +81,7 @@ function AcquisitionLimits({ result, organic }) {
         : <>Каждая регистрация увеличивает убыток на {money(-result.incrementalContribution)}.</>}</p>
     </section>}
     <section>
-      <h5>{organic ? 'Сколько пользователей нужно, чтобы окупить запуск?' : 'Какой бюджет на рекламу покроет ещё и запуск?'}</h5>
+      <h5>{organic ? 'Сколько регистраций покроет расходы за период?' : 'При каком рекламном бюджете проект окупится за этот период?'}</h5>
       <p>{launchNote}</p>
     </section>
   </div>;
@@ -90,11 +90,11 @@ function AcquisitionLimits({ result, organic }) {
 function Result({ result, model, target }) {
   const organic = target === 'organic';
   const sale = model === 'sale';
-  const heading = sale ? 'Результат разовых продаж' : 'Вклад привлечённых пользователей за весь срок';
+  const heading = result ? 'Результат за ' + numeric.format(result.months) + ' мес.' : 'Результат за период';
   if (!result) return (
     <div className="results lifetime-result">
       <h4>{heading}</h4>
-      <p>Заполни поля, чтобы увидеть прогноз. Для платной рекламы цена и доля регистраций должны быть больше нуля.</p>
+      <p>Проверь вводные и смету. Период расчёта и цена платного привлечения должны быть больше нуля.</p>
     </div>
   );
   const costLabel = {
@@ -111,8 +111,8 @@ function Result({ result, model, target }) {
     ]),
     ['Новые зарегистрированные пользователи', numeric.format(result.users)],
     ...(model !== 'ads' ? [] : [
-      ['Гости без регистрации, учтённые в прогнозе', numeric.format(result.guestCount)],
-      ['Показы рекламы за весь срок', numeric.format(result.adImpressions)],
+      ['Гости без регистрации за период', numeric.format(result.guestCount)],
+      ['Показы рекламы за период', numeric.format(result.adImpressions)],
       ['Выручка на активного пользователя за месяц (ARPU)', money(result.adRevenuePerUserMonth)],
       ...(result.guestCount > 0 ? [['Выручка от показов гостям', money(result.guestRevenue)]] : []),
     ]),
@@ -121,9 +121,9 @@ function Result({ result, model, target }) {
     ...(result.registeredBasis ? [] : [['Стоимость привлечения плательщика (CAC)', result.cac === null ? '—' : money(result.cac)]]),
     [sale ? 'Вклад одной покупки после переменных расходов' : result.registeredBasis ? 'Вклад пользователя за весь срок (LTV)' : 'Вклад плательщика за весь срок (LTV)', money(result.ltv)],
     ...(result.ltvToCac === null ? [] : [['LTV / CAC', numeric.format(result.ltvToCac) + '×']]),
-    [sale ? 'Выручка от разовых продаж' : 'Выручка за всё время использования', money(result.revenue)],
-    ['Вклад после рекламы, до расходов запуска', money(result.afterAds)],
-    ...(result.minPrice === null ? [] : [[costLabel + ' до расходов запуска', money(result.minPrice)]]),
+    [sale ? 'Выручка от разовых продаж' : 'Выручка за выбранный период', money(result.revenue)],
+    ['Вклад после рекламы, до затрат на запуск и содержание', money(result.afterAds)],
+    ...(result.minPrice === null ? [] : [[costLabel + ' для окупаемости привлечения', money(result.minPrice)]]),
     ...(result.payback === null ? [] : [[
       result.paybackWithinLifetime ? 'Окупаемость привлечения' : 'Окупаемость привлечения (дольше срока жизни)',
       numeric.format(result.payback) + ' мес.',
@@ -133,7 +133,8 @@ function Result({ result, model, target }) {
     <div className="results lifetime-result" aria-live="polite" aria-atomic="true">
       <h4>{heading}</h4>
       <strong className="profit money-value" data-tone={monthOutcome(result.profit).tone}>{money(result.profit)}</strong>
-      <p className="profit-caption">{sale && <>На покупателя приходится одна покупка. </>}Из {money(result.contributionBeforeAds)} после переменных расходов вычитаем {money(result.budget)} на рекламу и {money(result.launchCost)} на запуск. Регулярные расходы проекта учтены отдельно в итоге месяца.</p>
+      <p className="profit-caption">{sale && <>На покупателя приходится одна покупка. </>}Из {money(result.contributionBeforeAds)} после переменных расходов вычитаем {money(result.budget)} на рекламу, {money(result.launchCost)} на запуск и {money(result.recurringCost)} на содержание проекта.</p>
+      <p className="profit-caption">Регулярные расходы по смете — {money(result.monthlyCost)} в месяц × {numeric.format(result.months)} мес. = {money(result.recurringCost)}.</p>
       <AcquisitionLimits result={result} organic={organic} />
       <details className="metric-details">
         <summary>Посмотреть остальные показатели</summary>
@@ -454,7 +455,7 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
             <p>Возьми число уникальных гостей из аналитики. Если оценки пока нет, оставь поля пустыми.</p>
             <div className="columns amount-grid">
               {amount('guestUsers', 'Уникальных гостей без регистрации', 'чел.', '0')}
-              {amount('guestViews', 'Сколько показов видит один гость за весь период', 'шт.', '2')}
+              {amount('guestViews', 'Сколько показов видит один гость за период расчёта', 'шт.', '2')}
             </div>
           </div>
         </details>
@@ -464,7 +465,14 @@ export function Economy({ model, acquisition, target, customBasis, values, expen
       {stage(3, monthSummary, <MonthForm month={month} model={model} updateMonth={updateMonth}
         report={monthReport} traffic={traffic} values={values} />)}
       <details className="lifetime-details">
-        <summary>{model === 'sale' ? 'Окупится ли запуск при разовых продажах?' : 'Прогноз за весь срок использования · LTV и окупаемость'}</summary>
+        <summary>Окупятся ли привлечение, запуск и содержание проекта?</summary>
+        {amount('forecastMonths', 'За сколько месяцев считаем результат?', 'мес.',
+          String(defaultForecastMonths(values, model)).replace('.', ','),
+          model === 'subscription' || model === 'ads'
+            ? 'По умолчанию берём срок из модели дохода. Расходы идут каждый месяц периода, доход от этой группы — только пока люди пользуются продуктом.'
+            : model === 'sale'
+              ? 'По умолчанию 1 месяц. Расходы идут каждый месяц периода. Каждый покупатель платит один раз.'
+              : 'По умолчанию 1 месяц. Укажи, за сколько месяцев эта группа принесёт всю выручку из модели дохода. Расходы идут каждый месяц периода.')}
         <Result result={result} model={model} target={target} />
       </details>
     </div>
